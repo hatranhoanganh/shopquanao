@@ -1,20 +1,16 @@
 import { Sequelize } from "sequelize";
+import dotenv from "dotenv";
 
+dotenv.config(); // Đọc file .env
 
 const sequelize = new Sequelize(
-  // configDb.database, //tên database
-  // configDb.user, // ten user
-  // configDb.pass, //password user
-  // "khoa_hoc", //tên database
-  // "root", // ten user
-  // "123456", //password user
-  "shopquanao", //tên database
-  "root", // ten user
-  "", //password user
+  process.env.DB_NAME, // Tên database
+  process.env.DB_USER, // Tên user
+  process.env.DB_PASSWORD, // Password
   {
-    host: "localhost",
-    port: 3306,
-    dialect: "mysql",
+    host: process.env.DB_HOST,
+    port: process.env.DB_PORT || 3306, // Mặc định cổng 3306 nếu không có
+    dialect: process.env.DB_DIALECT,
   }
 );
 
