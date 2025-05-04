@@ -90,3 +90,6 @@ dotenv.config();
 
 ------------------B11:lên post man tạo request mới với urt http://localhost:8080/
 ------------------B12:code routes và controller
+------------------Đẩy lại code mới lên github : git add. 
+                                                git commit -m "change some texts"
+                                                git push origin master
