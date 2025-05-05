@@ -8,7 +8,7 @@ import { title } from "process";
 
 const model = initModels(sequelize);
 
-//Lấy tất cả sản phẩm
+// Lấy tất cả sản phẩm
 const getProducts = async (req, res) => {
   try {
     const listProducts = await model.product.findAll({
@@ -30,10 +30,30 @@ const getProducts = async (req, res) => {
       return res.status(404).json({ message: "Không có sản phẩm nào cả" });
     }
 
-    res.status(200).json({ message: "Lấy dữ liệu thành công", data: listProducts });
+    // Parse thumbnail từ chuỗi JSON thành mảng
+    const parsedProducts = listProducts.map((product) => {
+      const productData = product.toJSON(); // Chuyển instance Sequelize thành object thuần
+      if (productData.gallery && productData.gallery.thumbnail) {
+        try {
+          productData.gallery.thumbnail = JSON.parse(
+            productData.gallery.thumbnail
+          );
+        } catch (error) {
+          console.error("Lỗi parse thumbnail:", error.message);
+          productData.gallery.thumbnail = []; // Trả về mảng rỗng nếu parse thất bại
+        }
+      }
+      return productData;
+    });
+
+    res
+      .status(200)
+      .json({ message: "Lấy dữ liệu thành công", data: parsedProducts });
   } catch (err) {
     console.log(err);
-    res.status(400).json({ message: "Lỗi lấy dữ liệu sản phẩm" });
+    res
+      .status(400)
+      .json({ message: "Lỗi lấy dữ liệu sản phẩm", error: err.message });
   }
 };
 
@@ -93,10 +113,26 @@ const deleteUploadedFile = (filePath) => {
 // Thêm sản phẩm
 const addProduct = async (req, res) => {
   try {
-    const { id_category, id_gallery, title, price, discount, size, description } = req.body;
+    const {
+      id_category,
+      id_gallery,
+      title,
+      price,
+      discount,
+      size,
+      description,
+    } = req.body;
 
     // 1. Kiểm tra dữ liệu đầu vào
-    if (!id_category || !id_gallery || !title || !price || !discount || !size || !description) {
+    if (
+      !id_category ||
+      !id_gallery ||
+      !title ||
+      !price ||
+      !discount ||
+      !size ||
+      !description
+    ) {
       console.error("Thiếu thông tin cần thiết.");
       return res.status(400).json({
         message: "Vui lòng điền đầy đủ thông tin",
@@ -156,20 +192,30 @@ const addProduct = async (req, res) => {
       created_at: newProduct.created_at,
     };
 
-    return res.status(200).json({ message: "Thêm sản phẩm thành công", data: productData });
+    return res
+      .status(200)
+      .json({ message: "Thêm sản phẩm thành công", data: productData });
   } catch (err) {
     console.error(err);
-    return res.status(400).json({ message: "Lỗi khi thêm sản phẩm", error: err.message });
+    return res
+      .status(400)
+      .json({ message: "Lỗi khi thêm sản phẩm", error: err.message });
   }
 };
-
-
 
 // Cập nhật sản phẩm
 const updateProduct = async (req, res) => {
   const { id_product } = req.params;
   try {
-    const { id_category, id_gallery, title, price, discount, size, description } = req.body;
+    const {
+      id_category,
+      id_gallery,
+      title,
+      price,
+      discount,
+      size,
+      description,
+    } = req.body;
 
     // 1. Kiểm tra xem sản phẩm có tồn tại không
     let product = await model.product.findByPk(id_product);
@@ -178,7 +224,15 @@ const updateProduct = async (req, res) => {
     }
 
     // 2. Kiểm tra các trường cần thiết
-    if (!id_category || !id_gallery || !title || !price || !discount || !size || !description) {
+    if (
+      !id_category ||
+      !id_gallery ||
+      !title ||
+      !price ||
+      !discount ||
+      !size ||
+      !description
+    ) {
       return res.status(400).json({
         message: "Các thông tin không được để trống",
         data: null,
@@ -231,9 +285,13 @@ const updateProduct = async (req, res) => {
       updated_at: product.updated_at,
     };
 
-    return res.status(200).json({ message: "Cập nhật sản phẩm thành công", data: productData });
+    return res
+      .status(200)
+      .json({ message: "Cập nhật sản phẩm thành công", data: productData });
   } catch (err) {
-    return res.status(400).json({ message: "Lỗi khi cập nhật sản phẩm", error: err.message });
+    return res
+      .status(400)
+      .json({ message: "Lỗi khi cập nhật sản phẩm", error: err.message });
   }
 };
 
@@ -264,10 +322,26 @@ const getProductByCategory = async (req, res) => {
     });
 
     if (!listProduct || listProduct.length === 0) {
-      return res.status(404).json({ message: "Không có sản phẩm nào trong danh mục này" });
+      return res
+        .status(404)
+        .json({ message: "Không có sản phẩm nào trong danh mục này" });
     }
 
-    return res.status(200).json({ message: "success", data: listProduct });
+    // Parse thumbnail từ chuỗi JSON thành mảng
+    const parsedProducts = listProduct.map(product => {
+      const productData = product.toJSON();
+      if (productData.gallery && productData.gallery.thumbnail) {
+        try {
+          productData.gallery.thumbnail = JSON.parse(productData.gallery.thumbnail);
+        } catch (error) {
+          console.error('Lỗi parse thumbnail:', error.message);
+          productData.gallery.thumbnail = []; // Trả về mảng rỗng nếu parse thất bại
+        }
+      }
+      return productData;
+    });
+
+    return res.status(200).json({ message: "success", data: parsedProducts });
   } catch (err) {
     return res.status(400).json({ message: "error", error: err.message });
   }
@@ -292,7 +366,7 @@ const getProductById = async (req, res) => {
         },
         {
           model: model.gallery,
-          as: "gallery", // Alias phải khớp với quan hệ trong init-models.js
+          as: "gallery",
           attributes: ["id_gallery", "name", "thumbnail"],
         },
       ],
@@ -302,9 +376,20 @@ const getProductById = async (req, res) => {
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
     }
 
+    // Parse thumbnail từ chuỗi JSON thành mảng
+    const productData = product.toJSON(); // Chuyển instance Sequelize thành object thuần
+    if (productData.gallery && productData.gallery.thumbnail) {
+      try {
+        productData.gallery.thumbnail = JSON.parse(productData.gallery.thumbnail);
+      } catch (error) {
+        console.error('Lỗi parse thumbnail:', error.message);
+        productData.gallery.thumbnail = []; // Trả về mảng rỗng nếu parse thất bại
+      }
+    }
+
     return res.status(200).json({
       message: "Lấy thông tin sản phẩm thành công",
-      data: product,
+      data: productData,
     });
   } catch (err) {
     console.error("Error fetching product by ID:", err.message);
@@ -336,16 +421,30 @@ const getProductByName = async (req, res) => {
     });
 
     if (!listProduct || listProduct.length === 0) {
-      return res.status(404).json({ message: "Không tìm thấy sản phẩm nào với tên này" });
+      return res
+        .status(404)
+        .json({ message: "Không tìm thấy sản phẩm nào với tên này" });
     }
 
-    return res.status(200).json({ message: "success", data: listProduct });
+    // Parse thumbnail từ chuỗi JSON thành mảng
+    const parsedProducts = listProduct.map(product => {
+      const productData = product.toJSON();
+      if (productData.gallery && productData.gallery.thumbnail) {
+        try {
+          productData.gallery.thumbnail = JSON.parse(productData.gallery.thumbnail);
+        } catch (error) {
+          console.error('Lỗi parse thumbnail:', error.message);
+          productData.gallery.thumbnail = []; // Trả về mảng rỗng nếu parse thất bại
+        }
+      }
+      return productData;
+    });
+
+    return res.status(200).json({ message: "success", data: parsedProducts });
   } catch (err) {
     return res.status(400).json({ message: "error", error: err.message });
   }
 };
-
-
 
 //Lấy danh sách sản phẩm thông qua từ khóa tìm kiếm
 const getProductByKeyword = async (req, res) => {
@@ -370,16 +469,30 @@ const getProductByKeyword = async (req, res) => {
     });
 
     if (!listProduct || listProduct.length === 0) {
-      return res.status(404).json({ message: "Không tìm thấy sản phẩm nào với từ khóa này" });
+      return res
+        .status(404)
+        .json({ message: "Không tìm thấy sản phẩm nào với từ khóa này" });
     }
 
-    return res.status(200).json({ message: "success", data: listProduct });
+    // Parse thumbnail từ chuỗi JSON thành mảng
+    const parsedProducts = listProduct.map(product => {
+      const productData = product.toJSON();
+      if (productData.gallery && productData.gallery.thumbnail) {
+        try {
+          productData.gallery.thumbnail = JSON.parse(productData.gallery.thumbnail);
+        } catch (error) {
+          console.error('Lỗi parse thumbnail:', error.message);
+          productData.gallery.thumbnail = []; // Trả về mảng rỗng nếu parse thất bại
+        }
+      }
+      return productData;
+    });
+
+    return res.status(200).json({ message: "success", data: parsedProducts });
   } catch (err) {
     return res.status(400).json({ message: "error", error: err.message });
   }
 };
-
-
 
 export {
   getProducts,
