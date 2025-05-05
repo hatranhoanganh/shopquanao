@@ -20,10 +20,10 @@ productRoutes.delete("/XoaSanPham/:id_product", authMiddleware, adminMiddleware,
 productRoutes.put("/CapNhatSanPham/:id_product", authMiddleware, adminMiddleware, updateProduct);
 
 // Routes cho tất cả người dùng đã đăng nhập (chỉ cần authMiddleware)
-productRoutes.get("/LayDanhSachSanPham", authMiddleware, getProducts);
-productRoutes.get("/LayThongTinSanPhamTheoId/:id_product", authMiddleware, getProductById);
-productRoutes.get("/LayDanhSachSanPhamTheoDanhMuc/:id_category", authMiddleware, getProductByCategory);
-productRoutes.get("/LayDanhSachSanPhamTheoTitle/:title", authMiddleware, getProductByName);
-productRoutes.get("/LayDanhSachSanPhamTheoTuKhoaTimKiem/:keyword", authMiddleware, getProductByKeyword);
+productRoutes.get("/LayDanhSachSanPham", getProducts);
+productRoutes.get("/LayThongTinSanPhamTheoId/:id_product", getProductById);
+productRoutes.get("/LayDanhSachSanPhamTheoDanhMuc/:id_category", getProductByCategory);
+productRoutes.get("/LayDanhSachSanPhamTheoTitle/:title", getProductByName);
+productRoutes.get("/LayDanhSachSanPhamTheoTuKhoaTimKiem/:keyword", getProductByKeyword);
 
 export default productRoutes;

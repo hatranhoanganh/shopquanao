@@ -12,12 +12,11 @@ console.log("REFRESH_TOKEN_SECRET:", process.env.REFRESH_TOKEN_SECRET);
 const app = express();
 
 // Thêm middleware CORS
+app.use(express.static("public"));
 app.use(
   cors({
-    origin: "http://localhost:5173", // Cho phép origin frontend (dev)
-    methods: ["GET", "POST", "OPTIONS"], // Cho phép các phương thức
-    allowedHeaders: ["Content-Type", "Authorization"], // Cho phép các header
-    credentials: true, // Cho phép gửi cookie nếu cần
+    origin: "http://localhost:5173",
+    credentials: true,
   })
 );
 
