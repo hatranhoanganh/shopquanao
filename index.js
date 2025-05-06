@@ -2,16 +2,16 @@ import express from "express";
 import rootRoutes from "./src/routes/root.router.js";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
-import cors from "cors"; // Thêm cors
+import cors from "cors";
 
-dotenv.config(); // Đọc file .env
+dotenv.config();
 
 console.log("ACCESS_TOKEN_SECRET:", process.env.ACCESS_TOKEN_SECRET);
 console.log("REFRESH_TOKEN_SECRET:", process.env.REFRESH_TOKEN_SECRET);
 
 const app = express();
 
-// Thêm middleware CORS
+app.set("query parser", "extended");
 app.use(express.static("public"));
 app.use(
   cors({
@@ -29,6 +29,12 @@ app.get("/", (req, res) => {
 });
 
 app.use(rootRoutes);
+
+// Middleware xử lý lỗi
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ message: "Lỗi server", error: err.message });
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

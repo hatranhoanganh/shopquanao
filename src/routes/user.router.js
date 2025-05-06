@@ -5,11 +5,11 @@ import {
   refreshToken,
   logout,
   getInfoUser,
-  getAllUsers,
   updateInfoUser,
   changePassword,
 } from "../controllers/user.controller.js";
-import { authMiddleware,adminMiddleware } from "../middleware/authMiddleware.js"; // Import middleware
+import { getPaginatedData } from "../controllers/pagination.controller.js";
+import { authMiddleware, adminMiddleware } from "../middleware/authMiddleware.js";
 
 const userRouter = express.Router();
 
@@ -22,7 +22,13 @@ userRouter.post("/LamMoiToken", refreshToken);
 userRouter.post("/DangXuat", authMiddleware, logout);
 
 // Route cần token và quyền admin
-userRouter.get("/LayDanhSachNguoiDung", authMiddleware, adminMiddleware, getAllUsers);
+userRouter.get("/LayDanhSachNguoiDung", authMiddleware, adminMiddleware, (req, res) => {
+  console.log("req.query before setting:", req.query);
+  res.locals.type = "users";
+  console.log("res.locals after setting type:", res.locals);
+  console.log("req.query:", req.query);
+  getPaginatedData(req, res);
+});
 
 // Route cần token (người dùng thông thường)
 userRouter.get("/LayThongTinTaiKhoan/:id_user", authMiddleware, getInfoUser);

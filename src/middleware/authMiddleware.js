@@ -11,11 +11,10 @@ const authMiddleware = (req, res, next) => {
     return res.status(401).json({ message: "Token không hợp lệ. Vui lòng đăng nhập" });
   }
 
-  // Log để kiểm tra giá trị ACCESS_TOKEN_SECRET
   console.log("ACCESS_TOKEN_SECRET in authMiddleware:", process.env.ACCESS_TOKEN_SECRET);
-
   try {
     const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+    console.log("Decoded token:", decoded); // Debug thông tin token
     req.user = decoded;
     next();
   } catch (error) {
@@ -24,6 +23,9 @@ const authMiddleware = (req, res, next) => {
 };
 
 const adminMiddleware = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ message: "Không tìm thấy thông tin người dùng" });
+  }
   const userRole = req.user.role;
   if (userRole !== "admin") {
     return res.status(403).json({ message: "Chỉ admin mới có quyền thực hiện hành động này" });
@@ -33,17 +35,15 @@ const adminMiddleware = (req, res, next) => {
 
 const userOnlyMiddleware = (req, res, next) => {
   try {
-    // Lấy role từ token (req.user đã được thiết lập bởi authMiddleware)
+    if (!req.user) {
+      return res.status(401).json({ message: "Không tìm thấy thông tin người dùng" });
+    }
     const userRole = req.user.role;
-
-    // Kiểm tra nếu role không phải là "user"
     if (userRole !== "user") {
       return res.status(403).json({
         message: "Chỉ người dùng thông thường mới có quyền thực hiện hành động này",
       });
     }
-
-    // Nếu là user, tiếp tục xử lý
     next();
   } catch (error) {
     console.error("Error in userOnlyMiddleware:", error);
