@@ -250,7 +250,7 @@ const getInfoUser = async (req, res) => {
     // Lấy thông tin người dùng từ CSDL
     const user = await model.user.findOne({
       where: { id_user },
-      attributes: ["id_user", "fullname", "email", "phone_number", "createdAt", "role"],
+      attributes: ["id_user", "fullname", "email", "phone_number","address", "createdAt", "role"],
     });
 
     if (!user) {
