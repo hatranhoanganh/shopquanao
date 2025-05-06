@@ -423,4 +423,77 @@ const updateInfoUser = async (req, res) => {
   }
 };
 
-export { registerUser, loginUser, refreshToken, logout, getInfoUser, getAllUsers, updateInfoUser, changePassword };
+const searchUsersByKeyword = async (req, res) => {
+  try {
+    const { keyword, page = 1, limit = 10 } = req.query;
+
+    // Kiểm tra từ khóa
+    if (!keyword || typeof keyword !== "string" || keyword.trim() === "") {
+      return res.status(400).json({
+        message: "Vui lòng cung cấp từ khóa tìm kiếm hợp lệ",
+      });
+    }
+
+    // Chuẩn hóa page và limit
+    const pageNum = Math.max(1, parseInt(page, 10));
+    const limitNum = Math.max(1, parseInt(limit, 10));
+    const offset = (pageNum - 1) * limitNum;
+
+    // Tìm kiếm người dùng theo từ khóa trong fullname, email, phone_number
+    const result = await model.user.findAndCountAll({
+      where: {
+        [Op.or]: [
+          { fullname: { [Op.iLike]: `%${keyword}%` } }, // Tìm kiếm không phân biệt hoa thường
+          { email: { [Op.iLike]: `%${keyword}%` } },
+          { phone_number: { [Op.iLike]: `%${keyword}%` } },
+          { address: { [Op.iLike]: `%${keyword}%` } },
+        ],
+      },
+      attributes: [
+        "id_user",
+        "fullname",
+        "email",
+        "phone_number",
+        "address",
+        "createdAt",
+        "updatedAt",
+        "role",
+      ],
+      limit: limitNum,
+      offset,
+    });
+
+    const users = result.rows.map((user) => user.toJSON());
+    const totalItems = result.count;
+
+    if (users.length === 0) {
+      return res.status(404).json({
+        message: "Không tìm thấy người dùng nào phù hợp với từ khóa",
+      });
+    }
+
+    const totalPages = Math.ceil(totalItems / limitNum);
+    const pagination = {
+      currentPage: pageNum,
+      itemsPerPage: limitNum,
+      totalItems,
+      totalPages,
+      hasNextPage: pageNum < totalPages,
+      hasPrevPage: pageNum > 1,
+    };
+
+    return res.status(200).json({
+      message: "Tìm kiếm người dùng thành công",
+      data: users,
+      pagination,
+    });
+  } catch (error) {
+    console.error("Lỗi khi tìm kiếm người dùng:", error.message);
+    return res.status(500).json({
+      message: "Lỗi khi tìm kiếm người dùng",
+      error: error.message,
+    });
+  }
+};
+
+export { registerUser, loginUser, refreshToken, logout, getInfoUser, getAllUsers, updateInfoUser, changePassword,searchUsersByKeyword, };

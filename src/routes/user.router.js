@@ -7,6 +7,7 @@ import {
   getInfoUser,
   updateInfoUser,
   changePassword,
+  searchUsersByKeyword,
 } from "../controllers/user.controller.js";
 import { getPaginatedData } from "../controllers/pagination.controller.js";
 import { authMiddleware, adminMiddleware } from "../middleware/authMiddleware.js";
@@ -22,6 +23,7 @@ userRouter.post("/LamMoiToken", refreshToken);
 userRouter.post("/DangXuat", authMiddleware, logout);
 
 // Route cần token và quyền admin
+userRouter.get("/TimKiemNguoiDung", authMiddleware, adminMiddleware, searchUsersByKeyword);
 userRouter.get("/LayDanhSachNguoiDung", authMiddleware, adminMiddleware, (req, res) => {
   console.log("req.query before setting:", req.query);
   res.locals.type = "users";
