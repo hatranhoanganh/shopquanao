@@ -1,6 +1,5 @@
 import sequelize from "../models/connect.js";
 import initModels from "../models/init-models.js";
-import moment from "moment";
 import { Op } from "sequelize";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
@@ -68,7 +67,7 @@ const registerUser = async (req, res) => {
       email,
       phone_number,
       password: hashedPassword,
-      role: "user", // Gán role mặc định là "user" (có thể bỏ nếu đã có mặc định trong CSDL)
+      role: "user",
     });
 
     // Trả về thông tin người dùng
@@ -77,7 +76,7 @@ const registerUser = async (req, res) => {
       fullname: newUser.fullname,
       email: newUser.email,
       createdAt: newUser.createdAt,
-      role: newUser.role, // Thêm role vào phản hồi
+      role: newUser.role,
     };
 
     return res.status(201).json({
@@ -93,7 +92,6 @@ const registerUser = async (req, res) => {
   }
 };
 
-// Đăng nhập
 const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -128,19 +126,18 @@ const loginUser = async (req, res) => {
       });
     }
 
-    // Log để kiểm tra giá trị
     console.log("ACCESS_TOKEN_SECRET in loginUser:", process.env.ACCESS_TOKEN_SECRET);
     console.log("REFRESH_TOKEN_SECRET in loginUser:", process.env.REFRESH_TOKEN_SECRET);
 
     const accessToken = jwt.sign(
       { id_user: user.id_user, email: user.email, role: user.role },
-      process.env.ACCESS_TOKEN_SECRET,
+      ACCESS_TOKEN_SECRET,
       { expiresIn: "15m" }
     );
 
     const refreshToken = jwt.sign(
       { id_user: user.id_user, email: user.email, role: user.role },
-      process.env.REFRESH_TOKEN_SECRET,
+      REFRESH_TOKEN_SECRET,
       { expiresIn: "7d" }
     );
 
@@ -176,7 +173,6 @@ const loginUser = async (req, res) => {
   }
 };
 
-// Làm mới token
 const refreshToken = async (req, res) => {
   try {
     const refreshToken = req.cookies.refreshToken;
@@ -208,7 +204,7 @@ const refreshToken = async (req, res) => {
     });
   }
 };
-// Đăng xuất
+
 const logout = async (req, res) => {
   try {
     res.cookie("refreshToken", "", {
@@ -230,27 +226,23 @@ const logout = async (req, res) => {
   }
 };
 
-// Lấy thông tin 1 người dùng
 const getInfoUser = async (req, res) => {
   try {
-    const { id_user } = req.params; // Lấy id_user từ tham số URL
-    const userIdFromToken = req.user.id_user; // Lấy id_user từ token (đã được giải mã trong authMiddleware)
-    const userRole = req.user.role; // Lấy role từ token
+    const { id_user } = req.params;
+    const userIdFromToken = req.user.id_user;
+    const userRole = req.user.role;
 
-    // Kiểm tra id_user hợp lệ
     if (!id_user || isNaN(id_user)) {
       return res.status(400).json({ message: "ID người dùng không hợp lệ" });
     }
 
-    // Nếu không phải admin và id_user không khớp với id_user trong token
     if (userRole !== "admin" && parseInt(id_user) !== userIdFromToken) {
       return res.status(403).json({ message: "Bạn không có quyền xem thông tin của người dùng khác" });
     }
 
-    // Lấy thông tin người dùng từ CSDL
     const user = await model.user.findOne({
       where: { id_user },
-      attributes: ["id_user", "fullname", "email", "phone_number","address", "createdAt", "role"],
+      attributes: ["id_user", "fullname", "email", "phone_number", "address", "createdAt", "role"],
     });
 
     if (!user) {
@@ -270,10 +262,8 @@ const getInfoUser = async (req, res) => {
   }
 };
 
-//hàm lấy danh sách tất cả người dùng
 const getAllUsers = async (req, res) => {
   try {
-    // Lấy danh sách tất cả người dùng
     const users = await model.user.findAll({
       attributes: [
         "id_user",
@@ -293,7 +283,6 @@ const getAllUsers = async (req, res) => {
       });
     }
 
-    // Chuẩn bị dữ liệu phản hồi
     const userList = users.map(user => ({
       id_user: user.id_user,
       fullname: user.fullname,
@@ -318,7 +307,6 @@ const getAllUsers = async (req, res) => {
   }
 };
 
-// Thay đổi mật khẩu
 const changePassword = async (req, res) => {
   try {
     const userId = req.user.id_user;
@@ -370,7 +358,6 @@ const changePassword = async (req, res) => {
   }
 };
 
-// Cập nhật thông tin người dùng
 const updateInfoUser = async (req, res) => {
   try {
     const userId = req.user.id_user;
@@ -423,8 +410,6 @@ const updateInfoUser = async (req, res) => {
   }
 };
 
-const { Op, model } = require("sequelize");
-
 const searchUsersByKeyword = async (req, res) => {
   try {
     const { keyword, page = 1, limit = 10 } = req.query;
@@ -445,7 +430,7 @@ const searchUsersByKeyword = async (req, res) => {
     const result = await model.user.findAndCountAll({
       where: {
         [Op.or]: [
-          { fullname: { [Op.like]: `%${keyword}%` } }, // Sử dụng LIKE thay vì ILIKE
+          { fullname: { [Op.like]: `%${keyword}%` } },
           { email: { [Op.like]: `%${keyword}%` } },
           { phone_number: { [Op.like]: `%${keyword}%` } },
           { address: { [Op.like]: `%${keyword}%` } },
@@ -498,6 +483,14 @@ const searchUsersByKeyword = async (req, res) => {
   }
 };
 
-module.exports = { searchUsersByKeyword };
-
-export { registerUser, loginUser, refreshToken, logout, getInfoUser, getAllUsers, updateInfoUser, changePassword,searchUsersByKeyword, };
+export {
+  registerUser,
+  loginUser,
+  refreshToken,
+  logout,
+  getInfoUser,
+  getAllUsers,
+  changePassword,
+  updateInfoUser,
+  searchUsersByKeyword,
+};
