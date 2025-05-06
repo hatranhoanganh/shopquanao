@@ -340,8 +340,8 @@ const getAllOrders = async (req, res) => {
       include: [
         {
           model: model.user,
-          as: "id_user_user",
-          attributes: ["id_user", "fullname", "email", "phone_number", "address"], // Lấy thêm email, phone_number, address
+          as: "user",
+          attributes: ["id_user", "fullname", "email", "phone_number", "address"],
         },
       ],
     });
@@ -373,11 +373,11 @@ const getAllOrders = async (req, res) => {
         return {
           order_id: order.id_order,
           user: {
-            id_user: order.id_user_user.id_user,
-            fullname: order.id_user_user.fullname,
-            email: order.id_user_user.email,
-            phone_number: order.id_user_user.phone_number,
-            address: order.id_user_user.address,
+            id_user: order.user.id_user,
+            fullname: order.user.fullname,
+            email: order.user.email,
+            phone_number: order.user.phone_number,
+            address: order.user.address,
           },
           order_date: order.order_date,
           status: order.status,
@@ -528,7 +528,7 @@ const cancelOrder = async (req, res) => {
   }
 };
 
-// Hàm xóa đơn hàng 
+// Hàm xóa đơn hàng
 const deleteOrder = async (req, res) => {
   try {
     const { id_order } = req.params; // Lấy id_order từ URL params
@@ -550,7 +550,7 @@ const deleteOrder = async (req, res) => {
       include: [
         {
           model: model.user,
-          as: "id_user_user",
+          as: "user",
           attributes: ["id_user", "fullname", "email", "phone_number", "address"],
         },
       ],
@@ -598,11 +598,11 @@ const deleteOrder = async (req, res) => {
       data: {
         order_id: order.id_order,
         user: {
-          id_user: order.id_user_user.id_user,
-          fullname: order.id_user_user.fullname,
-          email: order.id_user_user.email,
-          phone_number: order.id_user_user.phone_number,
-          address: order.id_user_user.address,
+          id_user: order.user.id_user,
+          fullname: order.user.fullname,
+          email: order.user.email,
+          phone_number: order.user.phone_number,
+          address: order.user.address,
         },
         order_date: order.order_date,
         status: order.status,
@@ -631,7 +631,6 @@ const deleteOrder = async (req, res) => {
   }
 };
 
-
 // Hàm cập nhật trạng thái đơn hàng thành "confirmed"
 const confirmOrder = async (req, res) => {
   try {
@@ -654,7 +653,7 @@ const confirmOrder = async (req, res) => {
       include: [
         {
           model: model.user,
-          as: "id_user_user",
+          as: "user",
           attributes: ["id_user", "fullname", "email", "phone_number", "address"],
         },
       ],
@@ -664,7 +663,7 @@ const confirmOrder = async (req, res) => {
     }
 
     // 3. Kiểm tra trạng thái đơn hàng
-    if (order.status !== "pending",order.status !== "confirmed") {
+    if (order.status !== "pending") {
       return res.status(400).json({ message: "Chỉ có thể xác nhận đơn hàng đang ở trạng thái 'pending'" });
     }
 
@@ -696,11 +695,11 @@ const confirmOrder = async (req, res) => {
       data: {
         order_id: order.id_order,
         user: {
-          id_user: order.id_user_user.id_user,
-          fullname: order.id_user_user.fullname,
-          email: order.id_user_user.email,
-          phone_number: order.id_user_user.phone_number,
-          address: order.id_user_user.address,
+          id_user: order.user.id_user,
+          fullname: order.user.fullname,
+          email: order.user.email,
+          phone_number: order.user.phone_number,
+          address: order.user.address,
         },
         order_date: order.order_date,
         status: order.status,
