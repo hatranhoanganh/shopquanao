@@ -423,6 +423,8 @@ const updateInfoUser = async (req, res) => {
   }
 };
 
+const { Op, model } = require("sequelize");
+
 const searchUsersByKeyword = async (req, res) => {
   try {
     const { keyword, page = 1, limit = 10 } = req.query;
@@ -443,10 +445,10 @@ const searchUsersByKeyword = async (req, res) => {
     const result = await model.user.findAndCountAll({
       where: {
         [Op.or]: [
-          { fullname: { [Op.iLike]: `%${keyword}%` } }, // Tìm kiếm không phân biệt hoa thường
-          { email: { [Op.iLike]: `%${keyword}%` } },
-          { phone_number: { [Op.iLike]: `%${keyword}%` } },
-          { address: { [Op.iLike]: `%${keyword}%` } },
+          { fullname: { [Op.like]: `%${keyword}%` } }, // Sử dụng LIKE thay vì ILIKE
+          { email: { [Op.like]: `%${keyword}%` } },
+          { phone_number: { [Op.like]: `%${keyword}%` } },
+          { address: { [Op.like]: `%${keyword}%` } },
         ],
       },
       attributes: [
@@ -495,5 +497,7 @@ const searchUsersByKeyword = async (req, res) => {
     });
   }
 };
+
+module.exports = { searchUsersByKeyword };
 
 export { registerUser, loginUser, refreshToken, logout, getInfoUser, getAllUsers, updateInfoUser, changePassword,searchUsersByKeyword, };
