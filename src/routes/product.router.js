@@ -20,7 +20,7 @@ productRoutes.delete("/XoaSanPham/:id_product", authMiddleware, adminMiddleware,
 productRoutes.put("/CapNhatSanPham/:id_product", authMiddleware, adminMiddleware, updateProduct);
 
 // Routes cho tất cả người dùng đã đăng nhập (chỉ cần authMiddleware)
-productRoutes.get("/LayDanhSachSanPham", authMiddleware, (req, res) => {
+productRoutes.get("/LayDanhSachSanPham", (req, res) => {
   res.locals.type = "products"; // Sử dụng res.locals thay vì req.query
   getPaginatedData(req, res);
 });
