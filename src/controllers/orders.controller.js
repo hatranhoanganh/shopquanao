@@ -852,7 +852,7 @@ const getOrderByKeyword = async (req, res) => {
 
     // Truy vấn tìm kiếm
     const { count, rows: orders } = await model.orders.findAndCountAll({
-      where: {}, // Xóa where: orderConditions để lấy tất cả đơn hàng
+      where: {},
       include: [
         {
           model: model.user,
@@ -906,6 +906,8 @@ const getOrderByKeyword = async (req, res) => {
       const matchesProductConditions = products.some(op => {
         if (!op.id_product_product) return false;
         const product = op.id_product_product;
+        // Ghi log để kiểm tra dữ liệu product
+        console.log("Product data:", product);
         return (
           product.title?.toLowerCase().includes(trimmedKeyword) ||
           product.description?.toLowerCase().includes(trimmedKeyword) ||
@@ -941,19 +943,23 @@ const getOrderByKeyword = async (req, res) => {
         status: orderData.status,
         note: orderData.note,
         total_money: totalOrderMoney,
-        products: products.map((item) => ({
-          product_id: item.id_product,
-          quantity: item.quantity,
-          total_money: item.total_money,
-          product_details: item.id_product_product
-            ? {
-                title: item.id_product_product.title,
-                description: item.id_product_product.description,
-                size: item.id_product_product.size,
-                price: item.id_product_product.price,
-              }
-            : {},
-        })),
+        products: products.map((item) => {
+          // Ghi log để kiểm tra product_details
+          console.log("Product details for item:", item.id_product_product);
+          return {
+            product_id: item.id_product,
+            quantity: item.quantity,
+            total_money: item.total_money,
+            product_details: item.id_product_product
+              ? {
+                  title: item.id_product_product.title || "Không có tiêu đề",
+                  description: item.id_product_product.description || "",
+                  size: item.id_product_product.size || "",
+                  price: item.id_product_product.price || 0,
+                }
+              : {},
+          };
+        }),
       };
     });
 
