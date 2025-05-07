@@ -446,13 +446,26 @@ const getProductByName = async (req, res) => {
   }
 };
 
-//Lấy danh sách sản phẩm thông qua từ khóa tìm kiếm
+// Lấy danh sách sản phẩm thông qua từ khóa tìm kiếm
 const getProductByKeyword = async (req, res) => {
   try {
     const { keyword } = req.params;
+    const trimmedKeyword = keyword.trim();
+
+    if (!trimmedKeyword) {
+      return res.status(400).json({ message: "Từ khóa tìm kiếm không được để trống" });
+    }
+
+    // Tìm kiếm trên các trường title, price, discount, size, description
     const listProduct = await model.product.findAll({
       where: {
-        [Op.or]: [{ title: { [Op.like]: `%${keyword}%` } }],
+        [Op.or]: [
+          { title: { [Op.like]: `%${trimmedKeyword}%` } },
+          { price: { [Op.eq]: parseFloat(trimmedKeyword) || 0 } },
+          { discount: { [Op.eq]: parseFloat(trimmedKeyword) || 0 } },
+          { size: { [Op.like]: `%${trimmedKeyword}%` } },
+          { description: { [Op.like]: `%${trimmedKeyword}%` } },
+        ],
       },
       include: [
         {
@@ -475,14 +488,14 @@ const getProductByKeyword = async (req, res) => {
     }
 
     // Parse thumbnail từ chuỗi JSON thành mảng
-    const parsedProducts = listProduct.map(product => {
+    const parsedProducts = listProduct.map((product) => {
       const productData = product.toJSON();
       if (productData.gallery && productData.gallery.thumbnail) {
         try {
           productData.gallery.thumbnail = JSON.parse(productData.gallery.thumbnail);
         } catch (error) {
-          console.error('Lỗi parse thumbnail:', error.message);
-          productData.gallery.thumbnail = []; // Trả về mảng rỗng nếu parse thất bại
+          console.error("Lỗi parse thumbnail:", error.message);
+          productData.gallery.thumbnail = [];
         }
       }
       return productData;
@@ -490,7 +503,8 @@ const getProductByKeyword = async (req, res) => {
 
     return res.status(200).json({ message: "success", data: parsedProducts });
   } catch (err) {
-    return res.status(400).json({ message: "error", error: err.message });
+    console.error("Error fetching products by keyword:", err.message);
+    return res.status(400).json({ message: "Lỗi khi tìm kiếm sản phẩm", error: err.message });
   }
 };
 
