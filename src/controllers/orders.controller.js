@@ -1,6 +1,8 @@
 import sequelize from "../models/connect.js";
 import initModels from "../models/init-models.js";
 import { Op } from "sequelize";
+import Sequelize from 'sequelize';
+import unidecode from 'unidecode';
 import fs from "fs";
 import moment from "moment";
 import product from "../models/orders.js";
@@ -826,12 +828,11 @@ const removeFromCart = async (req, res) => {
   }
 };
 
-// Hàm lấy danh sách đơn hàng theo từ khóa
 const getOrderByKeyword = async (req, res) => {
   try {
     const { keyword } = req.params;
     const { page = 1, limit = 10 } = req.query;
-    const trimmedKeyword = keyword.trim();
+    const trimmedKeyword = keyword.trim().toLowerCase();
 
     if (!trimmedKeyword) {
       return res.status(400).json({ message: "Từ khóa tìm kiếm không được để trống" });
@@ -839,78 +840,121 @@ const getOrderByKeyword = async (req, res) => {
 
     const offset = (page - 1) * limit;
 
-    const whereConditions = {
+    // Điều kiện tìm kiếm cho orders
+    const orderConditions = {
       [Op.or]: [
-        { id_order: { [Op.eq]: parseInt(trimmedKeyword) || 0 } },
         { note: { [Op.like]: `%${trimmedKeyword}%` } },
         { status: { [Op.like]: `%${trimmedKeyword}%` } },
-        { total_money: { [Op.eq]: parseFloat(trimmedKeyword) || 0 } },
-        {
-          '$user.fullname$': { [Op.like]: `%${trimmedKeyword}%` },
-        },
-        {
-          '$user.email$': { [Op.like]: `%${trimmedKeyword}%` },
-        },
-        {
-          '$user.phone_number$': { [Op.like]: `%${trimmedKeyword}%` },
-        },
-        {
-          '$user.address$': { [Op.like]: `%${trimmedKeyword}%` },
-        },
       ],
     };
 
+    if (!isNaN(parseInt(trimmedKeyword))) {
+      orderConditions[Op.or].push({ id_order: { [Op.eq]: parseInt(trimmedKeyword) } });
+    }
+
+    // Điều kiện tìm kiếm cho user
+    const userConditions = {
+      [Op.or]: [
+        { fullname: { [Op.like]: `%${trimmedKeyword}%` } },
+        { email: { [Op.like]: `%${trimmedKeyword}%` } },
+        { phone_number: { [Op.like]: `%${trimmedKeyword}%` } },
+        { address: { [Op.like]: `%${trimmedKeyword}%` } },
+      ],
+    };
+
+    // Điều kiện tìm kiếm cho product
+    const productConditions = {
+      [Op.or]: [
+        { title: { [Op.like]: `%${trimmedKeyword}%` } },
+        { description: { [Op.like]: `%${trimmedKeyword}%` } },
+      ],
+    };
+
+    // Truy vấn tìm kiếm
     const { count, rows: orders } = await model.orders.findAndCountAll({
-      where: whereConditions,
+      where: {}, // Bỏ orderConditions để tìm kiếm linh hoạt hơn
       include: [
         {
           model: model.user,
           as: "user",
           attributes: ["id_user", "fullname", "email", "phone_number", "address"],
+          where: userConditions,
+          required: false,
         },
         {
           model: model.order_product,
           as: "order_products",
+          required: false,
           include: [
             {
               model: model.product,
               as: "id_product_product",
-              attributes: ["title", "size", "price", "discount"],
+              attributes: ["id_product", "title", "description", "size", "price", "discount"],
+              where: productConditions,
+              required: false,
             },
           ],
         },
       ],
       limit: parseInt(limit),
       offset: parseInt(offset),
+      distinct: true,
+      logging: console.log,
     });
 
-    if (!orders || orders.length === 0) {
-      return res.status(404).json({ message: "Không tìm thấy đơn hàng nào với từ khóa này" });
+    // Lọc thủ công các đơn hàng khớp với orderConditions
+    const filteredOrders = orders.filter(order => {
+      const matchesOrderConditions =
+        order.note?.toLowerCase().includes(trimmedKeyword) ||
+        order.status?.toLowerCase().includes(trimmedKeyword) ||
+        (!isNaN(parseInt(trimmedKeyword)) && order.id_order === parseInt(trimmedKeyword));
+
+      const matchesUserConditions = order.user !== null; // Nếu user khớp
+      const matchesProductConditions = order.order_products.some(op => op.id_product_product !== null); // Nếu product khớp
+
+      return matchesOrderConditions || matchesUserConditions || matchesProductConditions;
+    });
+
+    if (!filteredOrders || filteredOrders.length === 0) {
+      return res.status(200).json({
+        message: "Không tìm thấy đơn hàng nào với từ khóa này",
+        data: [],
+        pagination: {
+          totalItems: 0,
+          currentPage: parseInt(page),
+          pageSize: parseInt(limit),
+          totalPages: 0,
+        },
+      });
     }
 
-    const orderList = orders.map((order) => {
+    const orderList = filteredOrders.map((order) => {
       const orderData = order.toJSON();
-      const totalOrderMoney = orderData.order_products.reduce(
+      const products = orderData.order_products || [];
+      const totalOrderMoney = products.reduce(
         (sum, item) => sum + (item.total_money || 0),
         0
       );
       return {
         order_id: orderData.id_order,
-        user: orderData.user,
+        user: orderData.user || null,
         order_date: orderData.order_date,
         status: orderData.status,
         note: orderData.note,
         total_money: totalOrderMoney,
-        products: orderData.order_products.map((item) => ({
+        products: products.map((item) => ({
           product_id: item.id_product,
           quantity: item.quantity,
           total_money: item.total_money,
-          product_details: {
-            title: item.id_product_product.title,
-            size: item.id_product_product.size,
-            price: item.id_product_product.price,
-            discount: item.id_product_product.discount,
-          },
+          product_details: item.id_product_product
+            ? {
+                title: item.id_product_product.title,
+                description: item.id_product_product.description,
+                size: item.id_product_product.size,
+                price: item.id_product_product.price,
+                discount: item.id_product_product.discount,
+              }
+            : {},
         })),
       };
     });
@@ -919,10 +963,10 @@ const getOrderByKeyword = async (req, res) => {
       message: "Lấy danh sách đơn hàng theo từ khóa thành công",
       data: orderList,
       pagination: {
-        totalItems: count,
+        totalItems: filteredOrders.length,
         currentPage: parseInt(page),
         pageSize: parseInt(limit),
-        totalPages: Math.ceil(count / limit),
+        totalPages: Math.ceil(filteredOrders.length / limit),
       },
     });
   } catch (error) {
@@ -958,6 +1002,7 @@ const getOrderByStatus = async (req, res) => {
         {
           model: model.order_product,
           as: "order_products",
+          required: false, // Cho phép đơn hàng không có sản phẩm
           include: [
             {
               model: model.product,
@@ -972,12 +1017,22 @@ const getOrderByStatus = async (req, res) => {
     });
 
     if (!orders || orders.length === 0) {
-      return res.status(404).json({ message: `Không tìm thấy đơn hàng nào với trạng thái ${status}` });
+      return res.status(200).json({
+        message: `Không tìm thấy đơn hàng nào với trạng thái ${status}`,
+        data: [],
+        pagination: {
+          totalItems: 0,
+          currentPage: parseInt(page),
+          pageSize: parseInt(limit),
+          totalPages: 0,
+        },
+      });
     }
 
     const orderList = orders.map((order) => {
       const orderData = order.toJSON();
-      const totalOrderMoney = orderData.order_products.reduce(
+      const products = orderData.order_products || [];
+      const totalOrderMoney = products.reduce(
         (sum, item) => sum + (item.total_money || 0),
         0
       );
@@ -988,16 +1043,18 @@ const getOrderByStatus = async (req, res) => {
         status: orderData.status,
         note: orderData.note,
         total_money: totalOrderMoney,
-        products: orderData.order_products.map((item) => ({
+        products: products.map((item) => ({
           product_id: item.id_product,
           quantity: item.quantity,
           total_money: item.total_money,
-          product_details: {
-            title: item.id_product_product.title,
-            size: item.id_product_product.size,
-            price: item.id_product_product.price,
-            discount: item.id_product_product.discount,
-          },
+          product_details: item.id_product_product
+            ? {
+                title: item.id_product_product.title,
+                size: item.id_product_product.size,
+                price: item.id_product_product.price,
+                discount: item.id_product_product.discount,
+              }
+            : {},
         })),
       };
     });

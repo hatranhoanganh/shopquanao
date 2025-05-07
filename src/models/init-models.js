@@ -24,11 +24,11 @@ export default function initModels(sequelize) {
   gallery.hasMany(product, { foreignKey: "id_gallery" });
 
   // Quan hệ giữa user và orders
-  user.hasMany(orders, { foreignKey: "id_user" });
-  orders.belongsTo(user, { foreignKey: "id_user" });
+  user.hasMany(orders, { foreignKey: "id_user", as: "orders" });
+  orders.belongsTo(user, { foreignKey: "id_user", as: "user" });
 
   // Quan hệ giữa orders và order_product
-  orders.hasMany(order_product, { foreignKey: "id_order" });
+  orders.hasMany(order_product, { foreignKey: "id_order", as: "order_products" });
   order_product.belongsTo(orders, { foreignKey: "id_order" });
 
   // Quan hệ giữa product và order_product

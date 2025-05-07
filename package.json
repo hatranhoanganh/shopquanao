@@ -26,6 +26,7 @@
     "nodemon": "^3.1.9",
     "openssl": "^2.0.0",
     "sequelize": "^6.37.7",
-    "sequelize-auto": "^0.8.8"
+    "sequelize-auto": "^0.8.8",
+    "unidecode": "^1.1.0"
   }
 }
