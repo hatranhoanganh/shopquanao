@@ -11,8 +11,18 @@ const getPaginatedData = async (req, res) => {
   try {
     console.log("req.query in getPaginatedData:", req.query);
     console.log("res.locals in getPaginatedData:", res.locals);
-    const page = Math.max(1, parseInt(req.query.page, 10)) || 1;
-    const limit = Math.max(1, parseInt(req.query.limit, 10)) || 10;
+
+    // Kiểm tra và xử lý tham số page và limit
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+
+    if (isNaN(page) || page < 1) {
+      return res.status(400).json({ message: "Trang phải là số nguyên dương" });
+    }
+    if (isNaN(limit) || limit < 1 || limit > 100) {
+      return res.status(400).json({ message: "Giới hạn phải là số nguyên từ 1 đến 100" });
+    }
+
     const offset = (page - 1) * limit;
     type = res.locals?.type || req.query.type || "unknown";
 
@@ -23,7 +33,12 @@ const getPaginatedData = async (req, res) => {
     let data, totalItems;
 
     if (type === "products") {
+      // Lấy id_category từ query nếu có
+      const { id_category } = req.query;
+      const where = id_category ? { id_category: parseInt(id_category) } : {};
+
       const result = await model.product.findAndCountAll({
+        where,
         limit,
         offset,
         include: [
@@ -34,7 +49,7 @@ const getPaginatedData = async (req, res) => {
           },
           {
             model: model.gallery,
-            as: "gallery", // Đổi từ "galleries" thành "gallery"
+            as: "gallery",
             attributes: ["id_gallery", "name", "thumbnail"],
           },
         ],
@@ -53,7 +68,7 @@ const getPaginatedData = async (req, res) => {
             productData.gallery.thumbnail = [];
           }
         } else {
-          productData.gallery = productData.gallery || null; // Đổi từ galleries thành gallery
+          productData.gallery = productData.gallery || null;
         }
         return productData;
       });
@@ -77,16 +92,10 @@ const getPaginatedData = async (req, res) => {
       totalItems = result.count;
     }
 
-    if (data.length === 0) {
-      return res.status(404).json({
-        message: `Không tìm thấy ${type === "products" ? "sản phẩm" : "người dùng"} nào`,
-      });
-    }
-
     const totalPages = Math.ceil(totalItems / limit);
     const pagination = {
       currentPage: page,
-      itemsPerPage: limit,
+      pageSize: limit,
       totalItems,
       totalPages,
       hasNextPage: page < totalPages,
