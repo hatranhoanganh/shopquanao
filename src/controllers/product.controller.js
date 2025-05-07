@@ -450,23 +450,31 @@ const getProductByName = async (req, res) => {
 const getProductByKeyword = async (req, res) => {
   try {
     const { keyword } = req.params;
+    const { id_category, page = 1, limit = 10 } = req.query;
     const trimmedKeyword = keyword.trim();
 
     if (!trimmedKeyword) {
       return res.status(400).json({ message: "Từ khóa tìm kiếm không được để trống" });
     }
 
-    // Tìm kiếm trên các trường title, price, discount, size, description
-    const listProduct = await model.product.findAll({
-      where: {
-        [Op.or]: [
-          { title: { [Op.like]: `%${trimmedKeyword}%` } },
-          { price: { [Op.eq]: parseFloat(trimmedKeyword) || 0 } },
-          { discount: { [Op.eq]: parseFloat(trimmedKeyword) || 0 } },
-          { size: { [Op.like]: `%${trimmedKeyword}%` } },
-          { description: { [Op.like]: `%${trimmedKeyword}%` } },
-        ],
-      },
+    const whereConditions = {
+      [Op.or]: [
+        { title: { [Op.like]: `%${trimmedKeyword}%` } },
+        { price: { [Op.eq]: parseFloat(trimmedKeyword) || 0 } },
+        { discount: { [Op.eq]: parseFloat(trimmedKeyword) || 0 } },
+        { size: { [Op.like]: `%${trimmedKeyword}%` } },
+        { description: { [Op.like]: `%${trimmedKeyword}%` } },
+      ],
+    };
+
+    // Thêm điều kiện lọc theo danh mục nếu có id_category
+    if (id_category) {
+      whereConditions.id_category = id_category;
+    }
+
+    const offset = (page - 1) * limit;
+    const { count, rows: listProduct } = await model.product.findAndCountAll({
+      where: whereConditions,
       include: [
         {
           model: model.category,
@@ -479,6 +487,8 @@ const getProductByKeyword = async (req, res) => {
           attributes: ["id_gallery", "name", "thumbnail"],
         },
       ],
+      limit: parseInt(limit),
+      offset: parseInt(offset),
     });
 
     if (!listProduct || listProduct.length === 0) {
@@ -501,7 +511,16 @@ const getProductByKeyword = async (req, res) => {
       return productData;
     });
 
-    return res.status(200).json({ message: "success", data: parsedProducts });
+    return res.status(200).json({
+      message: "success",
+      data: parsedProducts,
+      pagination: {
+        totalItems: count,
+        currentPage: parseInt(page),
+        pageSize: parseInt(limit),
+        totalPages: Math.ceil(count / limit),
+      },
+    });
   } catch (err) {
     console.error("Error fetching products by keyword:", err.message);
     return res.status(400).json({ message: "Lỗi khi tìm kiếm sản phẩm", error: err.message });
