@@ -531,6 +531,8 @@ const getProductByKeyword = async (req, res) => {
 const getProductByCategoryName = async (req, res) => {
   try {
     const { name } = req.params;
+    const { page = 1, limit = 10 } = req.query;
+    const offset = (page - 1) * limit;
 
     const category = await model.category.findOne({
       where: { name: { [Op.like]: `%${name}%` } },
@@ -540,7 +542,7 @@ const getProductByCategoryName = async (req, res) => {
       return res.status(404).json({ message: "Danh mục không tồn tại" });
     }
 
-    const listProduct = await model.product.findAll({
+    const { count, rows: listProduct } = await model.product.findAndCountAll({
       where: { id_category: category.id_category },
       include: [
         {
@@ -554,6 +556,8 @@ const getProductByCategoryName = async (req, res) => {
           attributes: ["id_gallery", "name", "thumbnail"],
         },
       ],
+      limit: parseInt(limit),
+      offset: parseInt(offset),
     });
 
     if (!listProduct || listProduct.length === 0) {
@@ -575,7 +579,16 @@ const getProductByCategoryName = async (req, res) => {
       return productData;
     });
 
-    return res.status(200).json({ message: "success", data: parsedProducts });
+    return res.status(200).json({
+      message: "success",
+      data: parsedProducts,
+      pagination: {
+        totalItems: count,
+        currentPage: parseInt(page),
+        pageSize: parseInt(limit),
+        totalPages: Math.ceil(count / limit),
+      },
+    });
   } catch (err) {
     return res.status(400).json({ message: "error", error: err.message });
   }
