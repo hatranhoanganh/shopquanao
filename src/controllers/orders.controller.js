@@ -869,7 +869,7 @@ const getOrderByKeyword = async (req, res) => {
       ],
     };
 
-    // Điều kiện tìm kiếm cho product (loại bỏ discount)
+    // Điều kiện tìm kiếm cho product
     const productConditions = {
       [Op.or]: [
         { title: { [Op.like]: `%${trimmedKeyword}%` } },
@@ -956,7 +956,7 @@ const getOrderByKeyword = async (req, res) => {
       const totalOrderMoney = products.reduce((sum, item) => sum + (item.total_money || 0), 0);
       return {
         order_id: orderData.id_order,
-        user: orderData.user || null,
+        user: orderData.user || null, // Đảm bảo user là null nếu không tồn tại
         order_date: orderData.order_date,
         status: orderData.status,
         note: orderData.note,
