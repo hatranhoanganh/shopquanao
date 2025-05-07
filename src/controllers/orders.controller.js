@@ -859,16 +859,6 @@ const getOrderByKeyword = async (req, res) => {
       );
     }
 
-    // Điều kiện tìm kiếm cho user
-    const userConditions = {
-      [Op.or]: [
-        { fullname: { [Op.like]: `%${trimmedKeyword}%` } },
-        { email: { [Op.like]: `%${trimmedKeyword}%` } },
-        { phone_number: { [Op.like]: `%${trimmedKeyword}%` } },
-        { address: { [Op.like]: `%${trimmedKeyword}%` } },
-      ],
-    };
-
     // Điều kiện tìm kiếm cho product
     const productConditions = {
       [Op.or]: [
@@ -880,13 +870,13 @@ const getOrderByKeyword = async (req, res) => {
 
     // Truy vấn tìm kiếm
     const { count, rows: orders } = await model.orders.findAndCountAll({
-      where: {},
+      where: orderConditions, // Di chuyển điều kiện vào where chính
       include: [
         {
           model: model.user,
           as: "user",
           attributes: ["id_user", "fullname", "email", "phone_number", "address"],
-          where: userConditions,
+          // Xóa where: userConditions để luôn lấy thông tin user nếu có
           required: false,
         },
         {
@@ -922,8 +912,6 @@ const getOrderByKeyword = async (req, res) => {
         (!isNaN(parseInt(trimmedKeyword)) && order.id_order === parseInt(trimmedKeyword)) ||
         totalOrderMoney.toString().includes(trimmedKeyword);
 
-      const matchesUserConditions = order.user !== null;
-
       const matchesProductConditions = products.some(op => {
         if (!op.id_product_product) return false;
         const product = op.id_product_product;
@@ -934,7 +922,7 @@ const getOrderByKeyword = async (req, res) => {
         );
       });
 
-      return matchesOrderConditions || matchesUserConditions || matchesProductConditions;
+      return matchesOrderConditions || matchesProductConditions;
     });
 
     if (!filteredOrders || filteredOrders.length === 0) {
@@ -956,7 +944,7 @@ const getOrderByKeyword = async (req, res) => {
       const totalOrderMoney = products.reduce((sum, item) => sum + (item.total_money || 0), 0);
       return {
         order_id: orderData.id_order,
-        user: orderData.user || null, // Đảm bảo user là null nếu không tồn tại
+        user: orderData.user || null, // Luôn lấy thông tin user nếu có
         order_date: orderData.order_date,
         status: orderData.status,
         note: orderData.note,
