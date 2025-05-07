@@ -26,8 +26,8 @@ const getPaginatedData = async (req, res) => {
     const offset = (page - 1) * limit;
     type = res.locals?.type || req.query.type || "unknown";
 
-    if (!type || !["products", "users"].includes(type)) {
-      return res.status(400).json({ message: "Vui lòng cung cấp type hợp lệ (products hoặc users)" });
+    if (!type || !["products", "users", "orders"].includes(type)) {
+      return res.status(400).json({ message: "Vui lòng cung cấp type hợp lệ (products, users hoặc orders)" });
     }
 
     let data, totalItems;
@@ -72,7 +72,7 @@ const getPaginatedData = async (req, res) => {
         }
         return productData;
       });
-    } else {
+    } else if (type === "users") {
       const result = await model.user.findAndCountAll({
         limit,
         offset,
@@ -90,6 +90,57 @@ const getPaginatedData = async (req, res) => {
 
       data = result.rows.map((user) => user.toJSON());
       totalItems = result.count;
+    } else if (type === "orders") {
+      const result = await model.orders.findAndCountAll({
+        limit,
+        offset,
+        include: [
+          {
+            model: model.user,
+            as: "user",
+            attributes: ["id_user", "fullname", "email", "phone_number", "address"],
+          },
+          {
+            model: model.order_product,
+            as: "order_products",
+            include: [
+              {
+                model: model.product,
+                as: "id_product_product",
+                attributes: ["title", "size", "price", "discount"],
+              },
+            ],
+          },
+        ],
+      });
+
+      data = result.rows.map((order) => {
+        const orderData = order.toJSON();
+        const totalOrderMoney = orderData.order_products.reduce(
+          (sum, item) => sum + (item.total_money || 0),
+          0
+        );
+        return {
+          order_id: orderData.id_order,
+          user: orderData.user,
+          order_date: orderData.order_date,
+          status: orderData.status,
+          note: orderData.note,
+          total_money: totalOrderMoney,
+          products: orderData.order_products.map((item) => ({
+            product_id: item.id_product,
+            quantity: item.quantity,
+            total_money: item.total_money,
+            product_details: {
+              title: item.id_product_product.title,
+              size: item.id_product_product.size,
+              price: item.id_product_product.price,
+              discount: item.id_product_product.discount,
+            },
+          })),
+        };
+      });
+      totalItems = result.count;
     }
 
     const totalPages = Math.ceil(totalItems / limit);
@@ -103,7 +154,7 @@ const getPaginatedData = async (req, res) => {
     };
 
     return res.status(200).json({
-      message: `Lấy danh sách ${type === "products" ? "sản phẩm" : "người dùng"} thành công`,
+      message: `Lấy danh sách ${type === "products" ? "sản phẩm" : type === "users" ? "người dùng" : "đơn hàng"} thành công`,
       data,
       pagination,
     });

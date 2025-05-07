@@ -826,5 +826,202 @@ const removeFromCart = async (req, res) => {
   }
 };
 
+// Hàm lấy danh sách đơn hàng theo từ khóa
+const getOrderByKeyword = async (req, res) => {
+  try {
+    const { keyword } = req.params;
+    const { page = 1, limit = 10 } = req.query;
+    const trimmedKeyword = keyword.trim();
+
+    if (!trimmedKeyword) {
+      return res.status(400).json({ message: "Từ khóa tìm kiếm không được để trống" });
+    }
+
+    const offset = (page - 1) * limit;
+
+    const whereConditions = {
+      [Op.or]: [
+        { id_order: { [Op.eq]: parseInt(trimmedKeyword) || 0 } },
+        { note: { [Op.like]: `%${trimmedKeyword}%` } },
+        { status: { [Op.like]: `%${trimmedKeyword}%` } },
+        { total_money: { [Op.eq]: parseFloat(trimmedKeyword) || 0 } },
+        {
+          '$user.fullname$': { [Op.like]: `%${trimmedKeyword}%` },
+        },
+        {
+          '$user.email$': { [Op.like]: `%${trimmedKeyword}%` },
+        },
+        {
+          '$user.phone_number$': { [Op.like]: `%${trimmedKeyword}%` },
+        },
+        {
+          '$user.address$': { [Op.like]: `%${trimmedKeyword}%` },
+        },
+      ],
+    };
+
+    const { count, rows: orders } = await model.orders.findAndCountAll({
+      where: whereConditions,
+      include: [
+        {
+          model: model.user,
+          as: "user",
+          attributes: ["id_user", "fullname", "email", "phone_number", "address"],
+        },
+        {
+          model: model.order_product,
+          as: "order_products",
+          include: [
+            {
+              model: model.product,
+              as: "id_product_product",
+              attributes: ["title", "size", "price", "discount"],
+            },
+          ],
+        },
+      ],
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+    });
+
+    if (!orders || orders.length === 0) {
+      return res.status(404).json({ message: "Không tìm thấy đơn hàng nào với từ khóa này" });
+    }
+
+    const orderList = orders.map((order) => {
+      const orderData = order.toJSON();
+      const totalOrderMoney = orderData.order_products.reduce(
+        (sum, item) => sum + (item.total_money || 0),
+        0
+      );
+      return {
+        order_id: orderData.id_order,
+        user: orderData.user,
+        order_date: orderData.order_date,
+        status: orderData.status,
+        note: orderData.note,
+        total_money: totalOrderMoney,
+        products: orderData.order_products.map((item) => ({
+          product_id: item.id_product,
+          quantity: item.quantity,
+          total_money: item.total_money,
+          product_details: {
+            title: item.id_product_product.title,
+            size: item.id_product_product.size,
+            price: item.id_product_product.price,
+            discount: item.id_product_product.discount,
+          },
+        })),
+      };
+    });
+
+    return res.status(200).json({
+      message: "Lấy danh sách đơn hàng theo từ khóa thành công",
+      data: orderList,
+      pagination: {
+        totalItems: count,
+        currentPage: parseInt(page),
+        pageSize: parseInt(limit),
+        totalPages: Math.ceil(count / limit),
+      },
+    });
+  } catch (error) {
+    console.error("Lỗi khi tìm kiếm đơn hàng theo từ khóa:", error);
+    return res.status(500).json({
+      message: "Lỗi server khi tìm kiếm đơn hàng",
+      error: error.message,
+      stack: error.stack,
+    });
+  }
+};
+
+// Hàm lấy danh sách đơn hàng theo trạng thái
+const getOrderByStatus = async (req, res) => {
+  try {
+    const { status } = req.params;
+    const { page = 1, limit = 10 } = req.query;
+
+    if (!status || !["pending", "confirmed", "canceled"].includes(status)) {
+      return res.status(400).json({ message: "Trạng thái không hợp lệ (phải là pending, confirmed hoặc canceled)" });
+    }
+
+    const offset = (page - 1) * limit;
+
+    const { count, rows: orders } = await model.orders.findAndCountAll({
+      where: { status },
+      include: [
+        {
+          model: model.user,
+          as: "user",
+          attributes: ["id_user", "fullname", "email", "phone_number", "address"],
+        },
+        {
+          model: model.order_product,
+          as: "order_products",
+          include: [
+            {
+              model: model.product,
+              as: "id_product_product",
+              attributes: ["title", "size", "price", "discount"],
+            },
+          ],
+        },
+      ],
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+    });
+
+    if (!orders || orders.length === 0) {
+      return res.status(404).json({ message: `Không tìm thấy đơn hàng nào với trạng thái ${status}` });
+    }
+
+    const orderList = orders.map((order) => {
+      const orderData = order.toJSON();
+      const totalOrderMoney = orderData.order_products.reduce(
+        (sum, item) => sum + (item.total_money || 0),
+        0
+      );
+      return {
+        order_id: orderData.id_order,
+        user: orderData.user,
+        order_date: orderData.order_date,
+        status: orderData.status,
+        note: orderData.note,
+        total_money: totalOrderMoney,
+        products: orderData.order_products.map((item) => ({
+          product_id: item.id_product,
+          quantity: item.quantity,
+          total_money: item.total_money,
+          product_details: {
+            title: item.id_product_product.title,
+            size: item.id_product_product.size,
+            price: item.id_product_product.price,
+            discount: item.id_product_product.discount,
+          },
+        })),
+      };
+    });
+
+    return res.status(200).json({
+      message: `Lấy danh sách đơn hàng với trạng thái ${status} thành công`,
+      data: orderList,
+      pagination: {
+        totalItems: count,
+        currentPage: parseInt(page),
+        pageSize: parseInt(limit),
+        totalPages: Math.ceil(count / limit),
+      },
+    });
+  } catch (error) {
+    console.error("Lỗi khi lấy danh sách đơn hàng theo trạng thái:", error);
+    return res.status(500).json({
+      message: "Lỗi server khi lấy danh sách đơn hàng theo trạng thái",
+      error: error.message,
+      stack: error.stack,
+    });
+  }
+};
+
 // Export các hàm
-export { addToCart, placeOrder, getOrderList, getAllOrders, cancelOrder, deleteOrder, confirmOrder, removeFromCart };
+export { addToCart, placeOrder, getOrderList, getAllOrders, cancelOrder, deleteOrder, confirmOrder, removeFromCart,getOrderByKeyword,
+  getOrderByStatus, };
