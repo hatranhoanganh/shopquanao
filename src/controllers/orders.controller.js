@@ -845,11 +845,20 @@ const getOrderByKeyword = async (req, res) => {
       [Op.or]: [
         { note: { [Op.like]: `%${trimmedKeyword}%` } },
         { status: { [Op.like]: `%${trimmedKeyword}%` } },
+        // Tìm kiếm theo ngày đặt hàng (order_date)
+        Sequelize.where(
+          Sequelize.fn('LOWER', Sequelize.fn('DATE_FORMAT', Sequelize.col('orders.order_date'), '%d/%m/%Y %H:%i')),
+          { [Op.like]: `%${trimmedKeyword}%` }
+        ),
+        // Tìm kiếm theo tổng tiền (total_money sẽ được tính sau, không nằm trực tiếp trong bảng orders)
       ],
     };
 
     if (!isNaN(parseInt(trimmedKeyword))) {
-      orderConditions[Op.or].push({ id_order: { [Op.eq]: parseInt(trimmedKeyword) } });
+      orderConditions[Op.or].push(
+        { id_order: { [Op.eq]: parseInt(trimmedKeyword) } },
+        // Tìm kiếm theo tổng tiền đơn hàng (sẽ cần tính toán trong orderList)
+      );
     }
 
     // Điều kiện tìm kiếm cho user
@@ -867,12 +876,18 @@ const getOrderByKeyword = async (req, res) => {
       [Op.or]: [
         { title: { [Op.like]: `%${trimmedKeyword}%` } },
         { description: { [Op.like]: `%${trimmedKeyword}%` } },
+        { size: { [Op.like]: `%${trimmedKeyword}%` } },
+        // Tìm kiếm theo giảm giá (discount)
+        Sequelize.where(
+          Sequelize.fn('LOWER', Sequelize.cast(Sequelize.col('id_product_product.discount'), 'CHAR')),
+          { [Op.like]: `%${trimmedKeyword}%` }
+        ),
       ],
     };
 
     // Truy vấn tìm kiếm
     const { count, rows: orders } = await model.orders.findAndCountAll({
-      where: {}, // Bỏ orderConditions để tìm kiếm linh hoạt hơn
+      where: {},
       include: [
         {
           model: model.user,
@@ -899,18 +914,34 @@ const getOrderByKeyword = async (req, res) => {
       limit: parseInt(limit),
       offset: parseInt(offset),
       distinct: true,
-      logging: console.log,
     });
 
-    // Lọc thủ công các đơn hàng khớp với orderConditions
+    // Lọc thủ công các đơn hàng khớp với orderConditions hoặc các trường tính toán (như total_money)
     const filteredOrders = orders.filter(order => {
+      const orderData = order.toJSON();
+      const products = orderData.order_products || [];
+      const totalOrderMoney = products.reduce((sum, item) => sum + (item.total_money || 0), 0);
+
       const matchesOrderConditions =
         order.note?.toLowerCase().includes(trimmedKeyword) ||
         order.status?.toLowerCase().includes(trimmedKeyword) ||
-        (!isNaN(parseInt(trimmedKeyword)) && order.id_order === parseInt(trimmedKeyword));
+        format(new Date(order.order_date), "dd/MM/yyyy HH:mm").toLowerCase().includes(trimmedKeyword) ||
+        (!isNaN(parseInt(trimmedKeyword)) && order.id_order === parseInt(trimmedKeyword)) ||
+        totalOrderMoney.toString().includes(trimmedKeyword);
 
-      const matchesUserConditions = order.user !== null; // Nếu user khớp
-      const matchesProductConditions = order.order_products.some(op => op.id_product_product !== null); // Nếu product khớp
+      const matchesUserConditions = order.user !== null;
+
+      const matchesProductConditions = products.some(op => {
+        if (!op.id_product_product) return false;
+        const product = op.id_product_product;
+        return (
+          product.title?.toLowerCase().includes(trimmedKeyword) ||
+          product.description?.toLowerCase().includes(trimmedKeyword) ||
+          product.size?.toLowerCase().includes(trimmedKeyword) ||
+          product.discount?.toString().includes(trimmedKeyword) ||
+          op.total_money?.toString().includes(trimmedKeyword)
+        );
+      });
 
       return matchesOrderConditions || matchesUserConditions || matchesProductConditions;
     });
@@ -931,10 +962,7 @@ const getOrderByKeyword = async (req, res) => {
     const orderList = filteredOrders.map((order) => {
       const orderData = order.toJSON();
       const products = orderData.order_products || [];
-      const totalOrderMoney = products.reduce(
-        (sum, item) => sum + (item.total_money || 0),
-        0
-      );
+      const totalOrderMoney = products.reduce((sum, item) => sum + (item.total_money || 0), 0);
       return {
         order_id: orderData.id_order,
         user: orderData.user || null,
