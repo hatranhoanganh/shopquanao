@@ -880,6 +880,9 @@ const getOrderByKeyword = async (req, res) => {
       distinct: true,
     });
 
+    // Log toàn bộ dữ liệu orders để kiểm tra
+    console.log("Raw orders data:", JSON.stringify(orders, null, 2));
+
     // Lọc thủ công các đơn hàng khớp với từ khóa
     const filteredOrders = orders.filter(order => {
       const orderData = order.toJSON();
@@ -906,8 +909,7 @@ const getOrderByKeyword = async (req, res) => {
       const matchesProductConditions = products.some(op => {
         if (!op.id_product_product) return false;
         const product = op.id_product_product;
-        // Ghi log để kiểm tra dữ liệu product
-        console.log("Product data:", product);
+        console.log("Product data in matchesProductConditions:", product);
         return (
           product.title?.toLowerCase().includes(trimmedKeyword) ||
           product.description?.toLowerCase().includes(trimmedKeyword) ||
@@ -944,8 +946,7 @@ const getOrderByKeyword = async (req, res) => {
         note: orderData.note,
         total_money: totalOrderMoney,
         products: products.map((item) => {
-          // Ghi log để kiểm tra product_details
-          console.log("Product details for item:", item.id_product_product);
+          console.log("Product details for item in orderList:", item.id_product_product);
           return {
             product_id: item.id_product,
             quantity: item.quantity,
