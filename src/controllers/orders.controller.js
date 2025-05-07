@@ -841,24 +841,6 @@ const getOrderByKeyword = async (req, res) => {
 
     const offset = (page - 1) * limit;
 
-    // Điều kiện tìm kiếm cho orders
-    const orderConditions = {
-      [Op.or]: [
-        { note: { [Op.like]: `%${trimmedKeyword}%` } },
-        { status: { [Op.like]: `%${trimmedKeyword}%` } },
-        Sequelize.where(
-          Sequelize.fn('LOWER', Sequelize.fn('DATE_FORMAT', Sequelize.col('orders.order_date'), '%d/%m/%Y %H:%i')),
-          { [Op.like]: `%${trimmedKeyword}%` }
-        ),
-      ],
-    };
-
-    if (!isNaN(parseInt(trimmedKeyword))) {
-      orderConditions[Op.or].push(
-        { id_order: { [Op.eq]: parseInt(trimmedKeyword) } }
-      );
-    }
-
     // Điều kiện tìm kiếm cho product
     const productConditions = {
       [Op.or]: [
@@ -870,13 +852,12 @@ const getOrderByKeyword = async (req, res) => {
 
     // Truy vấn tìm kiếm
     const { count, rows: orders } = await model.orders.findAndCountAll({
-      where: orderConditions, // Di chuyển điều kiện vào where chính
+      where: {}, // Xóa where: orderConditions để lấy tất cả đơn hàng
       include: [
         {
           model: model.user,
           as: "user",
           attributes: ["id_user", "fullname", "email", "phone_number", "address"],
-          // Xóa where: userConditions để luôn lấy thông tin user nếu có
           required: false,
         },
         {
@@ -899,12 +880,13 @@ const getOrderByKeyword = async (req, res) => {
       distinct: true,
     });
 
-    // Lọc thủ công các đơn hàng khớp với orderConditions hoặc các trường tính toán
+    // Lọc thủ công các đơn hàng khớp với từ khóa
     const filteredOrders = orders.filter(order => {
       const orderData = order.toJSON();
       const products = orderData.order_products || [];
       const totalOrderMoney = products.reduce((sum, item) => sum + (item.total_money || 0), 0);
 
+      // Kiểm tra từ khóa trong các trường của orders
       const matchesOrderConditions =
         order.note?.toLowerCase().includes(trimmedKeyword) ||
         order.status?.toLowerCase().includes(trimmedKeyword) ||
@@ -912,6 +894,15 @@ const getOrderByKeyword = async (req, res) => {
         (!isNaN(parseInt(trimmedKeyword)) && order.id_order === parseInt(trimmedKeyword)) ||
         totalOrderMoney.toString().includes(trimmedKeyword);
 
+      // Kiểm tra từ khóa trong các trường của user
+      const matchesUserConditions = order.user && (
+        order.user.fullname?.toLowerCase().includes(trimmedKeyword) ||
+        order.user.email?.toLowerCase().includes(trimmedKeyword) ||
+        order.user.phone_number?.toLowerCase().includes(trimmedKeyword) ||
+        order.user.address?.toLowerCase().includes(trimmedKeyword)
+      );
+
+      // Kiểm tra từ khóa trong các trường của product
       const matchesProductConditions = products.some(op => {
         if (!op.id_product_product) return false;
         const product = op.id_product_product;
@@ -922,7 +913,8 @@ const getOrderByKeyword = async (req, res) => {
         );
       });
 
-      return matchesOrderConditions || matchesProductConditions;
+      // Trả về đơn hàng nếu khớp với bất kỳ điều kiện nào
+      return matchesOrderConditions || matchesUserConditions || matchesProductConditions;
     });
 
     if (!filteredOrders || filteredOrders.length === 0) {
@@ -944,7 +936,7 @@ const getOrderByKeyword = async (req, res) => {
       const totalOrderMoney = products.reduce((sum, item) => sum + (item.total_money || 0), 0);
       return {
         order_id: orderData.id_order,
-        user: orderData.user || null, // Luôn lấy thông tin user nếu có
+        user: orderData.user || null,
         order_date: orderData.order_date,
         status: orderData.status,
         note: orderData.note,
