@@ -8,25 +8,28 @@ import {
   getProductByCategory,
   getProductByName,
   getProductByKeyword,
+  getProductByCategoryName,
 } from "../controllers/product.controller.js";
 import { getPaginatedData } from "../controllers/pagination.controller.js";
-
+import { getAllCategory } from "../controllers/category.controller.js";
 
 const productRoutes = express.Router();
 
 // Routes chỉ dành cho admin (cần authMiddleware và adminMiddleware)
-productRoutes.post("/ThemSanPham",  addProduct);
-productRoutes.delete("/XoaSanPham/:id_product",  deleteProduct);
+productRoutes.post("/ThemSanPham", addProduct);
+productRoutes.delete("/XoaSanPham/:id_product", deleteProduct);
 productRoutes.put("/CapNhatSanPham/:id_product", updateProduct);
 
 // Routes cho tất cả người dùng đã đăng nhập (chỉ cần authMiddleware)
 productRoutes.get("/LayDanhSachSanPham", (req, res) => {
-  res.locals.type = "products"; // Sử dụng res.locals thay vì req.query
+  res.locals.type = "products";
   getPaginatedData(req, res);
 });
 productRoutes.get("/LayThongTinSanPhamTheoId/:id_product", getProductById);
 productRoutes.get("/LayDanhSachSanPhamTheoDanhMuc/:id_category", getProductByCategory);
 productRoutes.get("/LayDanhSachSanPhamTheoTitle/:title", getProductByName);
 productRoutes.get("/LayDanhSachSanPhamTheoTuKhoaTimKiem/:keyword", getProductByKeyword);
+productRoutes.get("/LayDanhSachSanPhamTheoTenDanhMuc/:name", getProductByCategoryName);
+productRoutes.get("/LayDanhSachDanhMuc", getAllCategory);
 
 export default productRoutes;

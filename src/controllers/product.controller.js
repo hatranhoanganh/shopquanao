@@ -179,7 +179,7 @@ const addProduct = async (req, res) => {
     const productData = {
       id_product: newProduct.id_product,
       id_category: newProduct.id_category,
-      category_name: category.category_name, // Lấy tên danh mục
+      name: category.name, // Lấy tên danh mục
       gallery: {
         id_gallery: gallery.id_gallery,
         thumbnail: gallery.thumbnail, // Lấy thumbnail từ gallery
@@ -272,7 +272,7 @@ const updateProduct = async (req, res) => {
     const productData = {
       id_product: product.id_product,
       id_category: product.id_category,
-      category_name: category.category_name, // Lấy tên danh mục
+      name: category.name, // Lấy tên danh mục
       gallery: {
         id_gallery: gallery.id_gallery,
         thumbnail: gallery.thumbnail, // Lấy thumbnail từ gallery
@@ -494,6 +494,60 @@ const getProductByKeyword = async (req, res) => {
   }
 };
 
+// Lấy danh sách sản phẩm theo tên danh mục
+const getProductByCategoryName = async (req, res) => {
+  try {
+    const { name } = req.params;
+
+    const category = await model.category.findOne({
+      where: { name: { [Op.like]: `%${name}%` } },
+    });
+
+    if (!category) {
+      return res.status(404).json({ message: "Danh mục không tồn tại" });
+    }
+
+    const listProduct = await model.product.findAll({
+      where: { id_category: category.id_category },
+      include: [
+        {
+          model: model.category,
+          as: "category",
+          attributes: ["id_category", "name"],
+        },
+        {
+          model: model.gallery,
+          as: "gallery",
+          attributes: ["id_gallery", "name", "thumbnail"],
+        },
+      ],
+    });
+
+    if (!listProduct || listProduct.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "Không có sản phẩm nào trong danh mục này" });
+    }
+
+    const parsedProducts = listProduct.map(product => {
+      const productData = product.toJSON();
+      if (productData.gallery && productData.gallery.thumbnail) {
+        try {
+          productData.gallery.thumbnail = JSON.parse(productData.gallery.thumbnail);
+        } catch (error) {
+          console.error('Lỗi parse thumbnail:', error.message);
+          productData.gallery.thumbnail = [];
+        }
+      }
+      return productData;
+    });
+
+    return res.status(200).json({ message: "success", data: parsedProducts });
+  } catch (err) {
+    return res.status(400).json({ message: "error", error: err.message });
+  }
+};
+
 export {
   getProducts,
   addProduct,
@@ -503,4 +557,5 @@ export {
   getProductById,
   getProductByName,
   getProductByKeyword,
+  getProductByCategoryName,
 };
