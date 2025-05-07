@@ -845,19 +845,16 @@ const getOrderByKeyword = async (req, res) => {
       [Op.or]: [
         { note: { [Op.like]: `%${trimmedKeyword}%` } },
         { status: { [Op.like]: `%${trimmedKeyword}%` } },
-        // Tìm kiếm theo ngày đặt hàng (order_date)
         Sequelize.where(
           Sequelize.fn('LOWER', Sequelize.fn('DATE_FORMAT', Sequelize.col('orders.order_date'), '%d/%m/%Y %H:%i')),
           { [Op.like]: `%${trimmedKeyword}%` }
         ),
-        // Tìm kiếm theo tổng tiền (total_money sẽ được tính sau, không nằm trực tiếp trong bảng orders)
       ],
     };
 
     if (!isNaN(parseInt(trimmedKeyword))) {
       orderConditions[Op.or].push(
-        { id_order: { [Op.eq]: parseInt(trimmedKeyword) } },
-        // Tìm kiếm theo tổng tiền đơn hàng (sẽ cần tính toán trong orderList)
+        { id_order: { [Op.eq]: parseInt(trimmedKeyword) } }
       );
     }
 
@@ -871,17 +868,12 @@ const getOrderByKeyword = async (req, res) => {
       ],
     };
 
-    // Điều kiện tìm kiếm cho product
+    // Điều kiện tìm kiếm cho product (loại bỏ discount)
     const productConditions = {
       [Op.or]: [
         { title: { [Op.like]: `%${trimmedKeyword}%` } },
         { description: { [Op.like]: `%${trimmedKeyword}%` } },
         { size: { [Op.like]: `%${trimmedKeyword}%` } },
-        // Tìm kiếm theo giảm giá (discount)
-        Sequelize.where(
-          Sequelize.fn('LOWER', Sequelize.cast(Sequelize.col('id_product_product.discount'), 'CHAR')),
-          { [Op.like]: `%${trimmedKeyword}%` }
-        ),
       ],
     };
 
@@ -904,7 +896,7 @@ const getOrderByKeyword = async (req, res) => {
             {
               model: model.product,
               as: "id_product_product",
-              attributes: ["id_product", "title", "description", "size", "price", "discount"],
+              attributes: ["id_product", "title", "description", "size", "price"],
               where: productConditions,
               required: false,
             },
@@ -916,7 +908,7 @@ const getOrderByKeyword = async (req, res) => {
       distinct: true,
     });
 
-    // Lọc thủ công các đơn hàng khớp với orderConditions hoặc các trường tính toán (như total_money)
+    // Lọc thủ công các đơn hàng khớp với orderConditions hoặc các trường tính toán
     const filteredOrders = orders.filter(order => {
       const orderData = order.toJSON();
       const products = orderData.order_products || [];
@@ -937,9 +929,7 @@ const getOrderByKeyword = async (req, res) => {
         return (
           product.title?.toLowerCase().includes(trimmedKeyword) ||
           product.description?.toLowerCase().includes(trimmedKeyword) ||
-          product.size?.toLowerCase().includes(trimmedKeyword) ||
-          product.discount?.toString().includes(trimmedKeyword) ||
-          op.total_money?.toString().includes(trimmedKeyword)
+          product.size?.toLowerCase().includes(trimmedKeyword)
         );
       });
 
@@ -980,7 +970,6 @@ const getOrderByKeyword = async (req, res) => {
                 description: item.id_product_product.description,
                 size: item.id_product_product.size,
                 price: item.id_product_product.price,
-                discount: item.id_product_product.discount,
               }
             : {},
         })),
