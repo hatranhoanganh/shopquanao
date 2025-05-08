@@ -197,7 +197,6 @@ const updateGallery = async (req, res) => {
   }
 };
 
-// Xóa gallery
 const deleteGallery = async (req, res) => {
   try {
     const { id_gallery } = req.params;
@@ -214,6 +213,17 @@ const deleteGallery = async (req, res) => {
     if (!gallery) {
       return res.status(404).json({
         message: "Gallery không tồn tại",
+      });
+    }
+
+    // Kiểm tra xem gallery có đang được sử dụng trong sản phẩm hay không
+    const productUsingGallery = await model.product.findOne({
+      where: { id_gallery: parseInt(id_gallery) },
+    });
+
+    if (productUsingGallery) {
+      return res.status(400).json({
+        message: "Gallery đang tồn tại trong sản phẩm nên không thể xóa",
       });
     }
 
