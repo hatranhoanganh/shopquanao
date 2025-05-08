@@ -977,8 +977,11 @@ const removeFromCart = async (req, res) => {
     }
 
     // 2. Kiểm tra quyền
-    if (userRole !== "user" && userId !== userIdFromToken) {
-      return res.status(403).json({ message: "Bạn không có quyền xóa sản phẩm khỏi giỏ hàng của người dùng khác" });
+    if (userRole !== "user") {
+      return res.status(403).json({ message: "Chỉ người dùng thông thường mới có quyền xóa sản phẩm trong giỏ hàng" });
+    }
+    if (userId !== userIdFromToken) {
+      return res.status(403).json({ message: "Bạn chỉ có thể xóa sản phẩm trong giỏ hàng của chính mình" });
     }
 
     // 3. Kiểm tra người dùng có tồn tại không
@@ -1080,7 +1083,6 @@ const removeFromCart = async (req, res) => {
     });
   }
 };
-
 
 
 // Hàm lấy danh sách đơn hàng theo trạng thái
@@ -1341,6 +1343,138 @@ const GetOrderByID = async (req, res) => {
   }
 };
 
+// Hàm lấy danh sách sản phẩm trong giỏ hàng
+const getCartItems = async (req, res) => {
+  try {
+    const { id_user } = req.params; // Lấy id_user từ URL params
+    const userIdFromToken = req.user.id_user; // Lấy id_user từ token
+    const userRole = req.user.role; // Lấy role từ token
+
+    // 1. Kiểm tra dữ liệu đầu vào
+    if (!id_user) {
+      return res.status(400).json({ message: "Vui lòng cung cấp id_user trong URL" });
+    }
+
+    const userId = parseInt(id_user, 10);
+    if (isNaN(userId)) {
+      return res.status(400).json({ message: "id_user phải là số nguyên hợp lệ" });
+    }
+
+    // 2. Kiểm tra quyền
+    if (userRole === "user" && userId !== userIdFromToken) {
+      return res.status(403).json({ message: "Bạn chỉ có thể xem giỏ hàng của chính mình" });
+    }
+
+    // 3. Kiểm tra người dùng có tồn tại không
+    const userExist = await model.user.findOne({
+      where: { id_user: userId },
+      attributes: ["id_user", "fullname", "email", "phone_number", "address"],
+    });
+    if (!userExist) {
+      return res.status(404).json({ message: "Người dùng không tồn tại" });
+    }
+
+    // 4. Tìm đơn hàng "cart" của người dùng
+    const cartOrder = await model.orders.findOne({
+      where: {
+        id_user: userId,
+        status: "cart",
+      },
+    });
+    if (!cartOrder) {
+      return res.status(200).json({
+        message: "Giỏ hàng của bạn hiện đang trống",
+        data: {
+          user: {
+            id_user: userExist.id_user,
+            fullname: userExist.fullname,
+            email: userExist.email,
+            phone_number: userExist.phone_number,
+            address: userExist.address,
+          },
+          products: [],
+          total_money: 0,
+        },
+      });
+    }
+
+    // 5. Lấy tất cả sản phẩm trong giỏ hàng
+    const orderProducts = await model.order_product.findAll({
+      where: { id_order: cartOrder.id_order },
+      include: [
+        {
+          model: model.product,
+          as: "id_product_product",
+          attributes: ["id_product", "title", "size", "price", "discount"],
+          include: [
+            {
+              model: model.gallery,
+              as: "gallery",
+              attributes: ["thumbnail"],
+            },
+          ],
+        },
+      ],
+    });
+
+    // 6. Tính tổng tiền của giỏ hàng
+    const totalCartMoney = orderProducts.reduce(
+      (sum, item) => sum + (item.total_money || 0),
+      0
+    );
+
+    // 7. Chuẩn bị dữ liệu trả về
+    const cartItems = orderProducts.map((item) => {
+      let thumbnail = item.id_product_product.gallery?.thumbnail || null;
+      if (thumbnail && typeof thumbnail === "string") {
+        try {
+          thumbnail = JSON.parse(thumbnail);
+        } catch (error) {
+          console.error("Lỗi parse thumbnail:", error.message);
+          thumbnail = [];
+        }
+      }
+      return {
+        product_id: item.id_product,
+        quantity: item.quantity,
+        total_money: item.total_money,
+        product_details: {
+          title: item.id_product_product.title,
+          size: item.id_product_product.size,
+          price: item.id_product_product.price,
+          discount: item.id_product_product.discount,
+          thumbnail: thumbnail || [],
+        },
+      };
+    });
+
+    // 8. Trả về kết quả
+    return res.status(200).json({
+      message: "Lấy danh sách sản phẩm trong giỏ hàng thành công",
+      data: {
+        order_id: cartOrder.id_order,
+        user: {
+          id_user: userExist.id_user,
+          fullname: userExist.fullname,
+          email: userExist.email,
+          phone_number: userExist.phone_number,
+          address: userExist.address,
+        },
+        note: cartOrder.note,
+        total_money: totalCartMoney,
+        products: cartItems,
+      },
+    });
+  } catch (error) {
+    console.error("Lỗi khi lấy danh sách sản phẩm trong giỏ hàng:", error);
+    return res.status(500).json({
+      message: "Lỗi server khi lấy danh sách sản phẩm trong giỏ hàng",
+      error: error.message,
+      stack: error.stack,
+    });
+  }
+};
+
 // Export các hàm
 export { addToCart, placeOrder, getOrderByKeyWordUser,  cancelOrder, deleteOrder, confirmOrder, removeFromCart,
-  getOrderByStatus,GetOrderByID, };
+  getOrderByStatus,GetOrderByID, getCartItems };

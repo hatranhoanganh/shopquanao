@@ -10,6 +10,7 @@ import {
   removeFromCart,
   getOrderByStatus,
   GetOrderByID,
+  getCartItems,
 } from "../controllers/orders.controller.js";
 import { getPaginatedData } from "../controllers/pagination.controller.js";
 import { authMiddleware, adminMiddleware, userOnlyMiddleware } from "../middleware/authMiddleware.js";
@@ -34,7 +35,11 @@ ordersRoutes.post("/HuyDonHang", authMiddleware, userOnlyMiddleware, cancelOrder
 // Route đặc biệt: cả admin và user đều có thể sử dụng
 ordersRoutes.get("/LayDanhSachDonHangCuaNguoiDung/:keyword", authMiddleware, getOrderByKeyWordUser);
 ordersRoutes.get("/LayDonHangTheoMaDonHang/:id_order", authMiddleware, GetOrderByID );
+ordersRoutes.get("/LayDanhSachSanPhamTrongGioHang/:id_user", authMiddleware, userOnlyMiddleware, getCartItems);
 
 ordersRoutes.delete("/XoaSanPhamTrongGioHang/:id_user/:id_product", authMiddleware, removeFromCart);
+
+
+
 
 export default ordersRoutes;
