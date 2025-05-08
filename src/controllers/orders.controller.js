@@ -280,15 +280,14 @@ const placeOrder = async (req, res) => {
   }
 };
 
-  // Hàm lấy danh sách đơn hàng của một người dùng dựa trên từ khóa với phân trang
+// Hàm lấy danh sách đơn hàng của một người dùng dựa trên từ khóa với phân trang
 const getOrderByKeyWordUser = async (req, res) => {
   try {
-    const { keyword } = req.params; // Lấy keyword từ params
-    const { page = 1, limit = 10 } = req.query; // Lấy page, limit từ query
-    const userIdFromToken = req.user.id_user; // Lấy id_user từ token
-    const userRole = req.user.role; // Lấy role từ token
+    const { keyword } = req.params;
+    const { page = 1, limit = 10, status } = req.query;
+    const userIdFromToken = req.user.id_user;
+    const userRole = req.user.role;
 
-    // 1. Kiểm tra dữ liệu đầu vào
     if (!keyword) {
       return res.status(400).json({ message: "Vui lòng cung cấp từ khóa tìm kiếm" });
     }
@@ -306,7 +305,6 @@ const getOrderByKeyWordUser = async (req, res) => {
 
     const offset = (pageNum - 1) * limitNum;
 
-    // 2. Tìm người dùng dựa trên từ khóa
     const userExist = await model.user.findOne({
       where: {
         [Op.or]: [
@@ -325,14 +323,17 @@ const getOrderByKeyWordUser = async (req, res) => {
 
     const userId = userExist.id_user;
 
-    // 3. Kiểm tra quyền: nếu không phải admin và id_user không khớp với id_user trong token
     if (userRole !== "admin" && userId !== userIdFromToken) {
       return res.status(403).json({ message: "Bạn không có quyền xem đơn hàng của người dùng khác" });
     }
 
-    // 4. Tìm đơn hàng với phân trang
+    const whereCondition = {
+      id_user: userId,
+      ...(status && { status }), // Thêm điều kiện lọc trạng thái
+    };
+
     const { count, rows: orders } = await model.orders.findAndCountAll({
-      where: { id_user: userId },
+      where: whereCondition,
       limit: limitNum,
       offset: offset,
       include: [
@@ -362,7 +363,6 @@ const getOrderByKeyWordUser = async (req, res) => {
       ],
     });
 
-    // 5. Nếu không có đơn hàng nào
     if (!orders || orders.length === 0) {
       return res.status(200).json({
         message: "Không tìm thấy đơn hàng đã đặt",
@@ -378,7 +378,6 @@ const getOrderByKeyWordUser = async (req, res) => {
       });
     }
 
-    // 6. Lấy thông tin chi tiết cho từng đơn hàng
     const orderList = orders.map((order) => {
       const orderData = order.toJSON();
       const totalOrderMoney = orderData.order_products.reduce(
@@ -424,7 +423,6 @@ const getOrderByKeyWordUser = async (req, res) => {
       };
     });
 
-    // 7. Trả về danh sách đơn hàng với phân trang
     return res.status(200).json({
       message: "Lấy danh sách đơn hàng thành công",
       data: orderList,
@@ -446,7 +444,6 @@ const getOrderByKeyWordUser = async (req, res) => {
     });
   }
 };
-
 // const getAllOrders = async (req, res) => {
 //   try {
 //     // 1. Kiểm tra và xử lý tham số phân trang
