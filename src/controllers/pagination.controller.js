@@ -26,13 +26,35 @@ const getPaginatedData = async (req, res) => {
     const offset = (page - 1) * limit;
     type = res.locals?.type || req.query.type || "unknown";
 
-    if (!type || !["products", "users", "orders"].includes(type)) {
-      return res.status(400).json({ message: "Vui lòng cung cấp type hợp lệ (products, users hoặc orders)" });
+    if (!type || !["products", "users", "orders", "galleries"].includes(type)) {
+      return res.status(400).json({ message: "Vui lòng cung cấp type hợp lệ (products, users, orders hoặc galleries)" });
     }
 
     let data, totalItems;
 
-    if (type === "products") {
+    if (type === "galleries") {
+      const result = await model.gallery.findAndCountAll({
+        limit,
+        offset,
+        attributes: ["id_gallery", "name", "thumbnail"],
+      });
+
+      data = result.rows.map((gallery) => {
+        const galleryData = gallery.toJSON();
+        if (galleryData.thumbnail) {
+          try {
+            galleryData.thumbnail = JSON.parse(galleryData.thumbnail);
+          } catch (error) {
+            console.error("Lỗi parse thumbnail:", error.message);
+            galleryData.thumbnail = [];
+          }
+        } else {
+          galleryData.thumbnail = [];
+        }
+        return galleryData;
+      });
+      totalItems = result.count;
+    } else if (type === "products") {
       // Lấy id_category từ query nếu có
       const { id_category } = req.query;
       const where = id_category ? { id_category: parseInt(id_category) } : {};
@@ -173,7 +195,7 @@ const getPaginatedData = async (req, res) => {
     };
 
     return res.status(200).json({
-      message: `Lấy danh sách ${type === "products" ? "sản phẩm" : type === "users" ? "người dùng" : "đơn hàng"} thành công`,
+      message: `Lấy danh sách ${type === "products" ? "sản phẩm" : type === "users" ? "người dùng" : type === "orders" ? "đơn hàng" : "gallery"} thành công`,
       data,
       pagination,
     });

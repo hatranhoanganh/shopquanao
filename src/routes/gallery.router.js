@@ -1,20 +1,25 @@
-import express from 'express';
-import upload from '../utils/multer.js'; // Nếu utils nằm trong src/
+import express from "express";
+import upload from "../utils/multer.js";
 import {
-    insertGallery,
-    updateGallery,
-    deleteGallery,
-    getGallery,
+  insertGallery,
+  updateGallery,
+  deleteGallery,
+  getGalleryByKeyword,
 } from "../controllers/gallery.controller.js";
-
+import { getPaginatedData } from "../controllers/pagination.controller.js";
 
 const galleryRoutes = express.Router();
 
-// Áp dụng authMiddleware và adminMiddleware cho tất cả các route
-galleryRoutes.post('/InsertGallery', upload.array('thumbnail'), insertGallery);
-galleryRoutes.put('/UpdateGallery/:id_gallery', upload.array('thumbnail'), updateGallery);
-galleryRoutes.delete('/DeleteGallery/:id_gallery', deleteGallery);
-galleryRoutes.get('/GetGallery/:id_gallery', getGallery); 
-galleryRoutes.get('/GetGallery', getGallery);
+
+galleryRoutes.post("/ThemGallery", upload.array("thumbnail"), insertGallery);
+galleryRoutes.put("/CapNhatGallery/:id_gallery", upload.array("thumbnail"), updateGallery);
+galleryRoutes.delete("/XoaGallery/:id_gallery", deleteGallery);
+galleryRoutes.get("/LayGalleryTheoMaHoacTen/:keyword", getGalleryByKeyword);
+
+
+galleryRoutes.get("/LayDanhSachGallery", (req, res) => {
+  res.locals.type = "galleries";
+  getPaginatedData(req, res);
+});
 
 export default galleryRoutes;

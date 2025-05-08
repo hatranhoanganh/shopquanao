@@ -258,89 +258,67 @@ const deleteGallery = async (req, res) => {
   }
 };
 
-// Lấy gallery
-const getGallery = async (req, res) => {
+// Lấy gallery theo keyword (mã hoặc tên)
+const getGalleryByKeyword = async (req, res) => {
   try {
-    const { id_gallery } = req.params;
+    const { keyword } = req.params;
+    const { keyword: queryKeyword } = req.query;
 
-    if (id_gallery) {
-      if (isNaN(id_gallery)) {
-        return res.status(400).json({
-          message: "id_gallery không hợp lệ, phải là một số",
-        });
-      }
+    // Lấy keyword từ path hoặc query, ưu tiên path
+    const searchKeyword = keyword || queryKeyword;
 
-      const gallery = await model.gallery.findOne({
-        where: { id_gallery: parseInt(id_gallery) },
-      });
-
-      if (!gallery) {
-        return res.status(404).json({
-          message: "Gallery không tồn tại",
-        });
-      }
-
-      let thumbnails = [];
-      if (gallery.thumbnail) {
-        try {
-          thumbnails = JSON.parse(gallery.thumbnail);
-          if (!Array.isArray(thumbnails)) {
-            thumbnails = [thumbnails];
-          }
-        } catch (error) {
-          console.log(
-            "Thumbnail không phải JSON, xử lý như URL đơn:",
-            gallery.thumbnail
-          );
-          thumbnails = [gallery.thumbnail];
-        }
-      }
-
-      return res.status(200).json({
-        message: "Lấy gallery thành công",
-        data: {
-          id_gallery: gallery.id_gallery,
-          name: gallery.name,
-          thumbnails: thumbnails,
-        },
-      });
-    } else {
-      const galleries = await model.gallery.findAll();
-
-      const galleriesWithThumbnails = galleries.map((gallery) => {
-        let thumbnails = [];
-        if (gallery.thumbnail) {
-          try {
-            thumbnails = JSON.parse(gallery.thumbnail);
-            if (!Array.isArray(thumbnails)) {
-              thumbnails = [thumbnails];
-            }
-          } catch (error) {
-            console.log(
-              "Thumbnail không phải JSON, xử lý như URL đơn:",
-              gallery.thumbnail
-            );
-            thumbnails = [gallery.thumbnail];
-          }
-        }
-        return {
-          id_gallery: gallery.id_gallery,
-          name: gallery.name,
-          thumbnails: thumbnails,
-        };
-      });
-
-      return res.status(200).json({
-        message: "Lấy danh sách gallery thành công",
-        data: galleriesWithThumbnails,
+    if (!searchKeyword) {
+      return res.status(400).json({
+        message: "Vui lòng cung cấp keyword (mã hoặc tên gallery)",
       });
     }
+
+    let whereClause = {};
+    // Nếu keyword là số, tìm theo id_gallery
+    if (!isNaN(searchKeyword)) {
+      whereClause.id_gallery = parseInt(searchKeyword);
+    } else {
+      // Nếu keyword không phải số, tìm theo name
+      whereClause.name = { [Op.like]: `%${searchKeyword}%` };
+    }
+
+    const galleries = await model.gallery.findAll({
+      where: whereClause,
+      attributes: ["id_gallery", "name", "thumbnail"],
+    });
+
+    if (galleries.length === 0) {
+      return res.status(404).json({
+        message: "Gallery không tồn tại",
+      });
+    }
+
+    const data = galleries.map((gallery) => {
+      const galleryData = gallery.toJSON();
+      if (galleryData.thumbnail) {
+        try {
+          galleryData.thumbnail = JSON.parse(galleryData.thumbnail);
+        } catch (error) {
+          console.error("Lỗi parse thumbnail:", error.message);
+          galleryData.thumbnail = [];
+        }
+      } else {
+        galleryData.thumbnail = [];
+      }
+      return galleryData;
+    });
+
+    return res.status(200).json({
+      message: "Lấy thông tin gallery thành công",
+      data,
+    });
   } catch (error) {
-    console.error("Error getting gallery:", error.message);
+    console.error("Lỗi khi lấy gallery:", error.message);
     return res.status(500).json({
       message: "Lỗi khi lấy gallery",
       error: error.message,
     });
   }
 };
-export { insertGallery, updateGallery, deleteGallery, getGallery };
+
+export { insertGallery, updateGallery, deleteGallery,getGalleryByKeyword, };
