@@ -54,6 +54,13 @@ const addToCart = async (req, res) => {
     // 5. Kiểm tra sản phẩm có tồn tại không
     const productExist = await model.product.findOne({
       where: { id_product },
+      include: [
+        {
+          model: model.gallery,
+          as: "gallery",
+          attributes: ["thumbnail"],
+        },
+      ],
     });
     if (!productExist) {
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
@@ -111,7 +118,18 @@ const addToCart = async (req, res) => {
       });
     }
 
-    // 9. Trả về kết quả
+    // 9. Xử lý thumbnail
+    let thumbnail = productExist.gallery?.thumbnail || null;
+    if (thumbnail && typeof thumbnail === "string") {
+      try {
+        thumbnail = JSON.parse(thumbnail);
+      } catch (error) {
+        console.error("Lỗi parse thumbnail:", error.message);
+        thumbnail = [];
+      }
+    }
+
+    // 10. Trả về kết quả
     return res.status(200).json({
       message: "Thêm sản phẩm vào giỏ hàng thành công",
       data: {
@@ -119,9 +137,13 @@ const addToCart = async (req, res) => {
         product_id: orderProduct.id_product,
         quantity: orderProduct.quantity,
         total_money: orderProduct.total_money,
-        title: productExist.title,
-        size: productExist.size,
-        price: productExist.price,
+        product_details: {
+          title: productExist.title,
+          size: productExist.size,
+          price: productExist.price,
+          discount: productExist.discount,
+          thumbnail: thumbnail || [],
+        },
       },
     });
   } catch (error) {
@@ -182,6 +204,20 @@ const placeOrder = async (req, res) => {
       where: {
         id_order: order.id_order,
       },
+      include: [
+        {
+          model: model.product,
+          as: "id_product_product",
+          attributes: ["title", "size", "price", "discount"],
+          include: [
+            {
+              model: model.gallery,
+              as: "gallery",
+              attributes: ["thumbnail"],
+            },
+          ],
+        },
+      ],
     });
     if (!orderProducts || orderProducts.length === 0) {
       return res.status(400).json({ message: "Giỏ hàng trống, không thể đặt hàng" });
@@ -209,11 +245,29 @@ const placeOrder = async (req, res) => {
         status: order.status,
         note: order.note,
         total_money: totalOrderMoney,
-        products: orderProducts.map((item) => ({
-          product_id: item.id_product,
-          quantity: item.quantity,
-          total_money: item.total_money,
-        })),
+        products: orderProducts.map((item) => {
+          let thumbnail = item.id_product_product.gallery?.thumbnail || null;
+          if (thumbnail && typeof thumbnail === "string") {
+            try {
+              thumbnail = JSON.parse(thumbnail);
+            } catch (error) {
+              console.error("Lỗi parse thumbnail:", error.message);
+              thumbnail = [];
+            }
+          }
+          return {
+            product_id: item.id_product,
+            quantity: item.quantity,
+            total_money: item.total_money,
+            product_details: {
+              title: item.id_product_product.title,
+              size: item.id_product_product.size,
+              price: item.id_product_product.price,
+              discount: item.id_product_product.discount,
+              thumbnail: thumbnail || [],
+            },
+          };
+        }),
       },
     });
   } catch (error) {
@@ -226,83 +280,135 @@ const placeOrder = async (req, res) => {
   }
 };
 
-// Hàm lấy danh sách đơn hàng đã đặt của một người dùng
-const getOrderList = async (req, res) => {
+  // Hàm lấy danh sách đơn hàng của một người dùng dựa trên từ khóa với phân trang
+const getOrderByKeyWordUser = async (req, res) => {
   try {
-    const { id_user } = req.params; // Lấy id_user từ tham số URL
+    const { keyword } = req.params; // Lấy keyword từ params
+    const { page = 1, limit = 10 } = req.query; // Lấy page, limit từ query
     const userIdFromToken = req.user.id_user; // Lấy id_user từ token
     const userRole = req.user.role; // Lấy role từ token
 
     // 1. Kiểm tra dữ liệu đầu vào
-    if (!id_user) {
-      return res.status(400).json({ message: "Vui lòng cung cấp id_user trong URL" });
+    if (!keyword) {
+      return res.status(400).json({ message: "Vui lòng cung cấp từ khóa tìm kiếm" });
     }
 
-    const userId = parseInt(id_user, 10);
-    if (isNaN(userId)) {
-      return res.status(400).json({ message: "id_user phải là một số nguyên hợp lệ" });
+    const normalizedKeyword = decodeURIComponent(keyword).trim();
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
+
+    if (isNaN(pageNum) || pageNum < 1) {
+      return res.status(400).json({ message: "Trang phải là số nguyên dương" });
+    }
+    if (isNaN(limitNum) || limitNum < 1 || limitNum > 100) {
+      return res.status(400).json({ message: "Giới hạn phải là số nguyên từ 1 đến 100" });
     }
 
-    // 2. Kiểm tra quyền: nếu không phải admin và id_user không khớp với id_user trong token
+    const offset = (pageNum - 1) * limitNum;
+
+    // 2. Tìm người dùng dựa trên từ khóa
+    const userExist = await model.user.findOne({
+      where: {
+        [Op.or]: [
+          { fullname: { [Op.like]: `%${normalizedKeyword}%` } },
+          { email: { [Op.like]: `%${normalizedKeyword}%` } },
+          { phone_number: { [Op.like]: `%${normalizedKeyword}%` } },
+          { address: { [Op.like]: `%${normalizedKeyword}%` } },
+        ],
+      },
+      attributes: ["id_user", "fullname", "email", "phone_number", "address"],
+    });
+
+    if (!userExist) {
+      return res.status(404).json({ message: "Không tìm thấy người dùng khớp với từ khóa" });
+    }
+
+    const userId = userExist.id_user;
+
+    // 3. Kiểm tra quyền: nếu không phải admin và id_user không khớp với id_user trong token
     if (userRole !== "admin" && userId !== userIdFromToken) {
       return res.status(403).json({ message: "Bạn không có quyền xem đơn hàng của người dùng khác" });
     }
 
-    // 3. Kiểm tra người dùng có tồn tại không và lấy đầy đủ thông tin
-    const userExist = await model.user.findOne({
+    // 4. Tìm đơn hàng với phân trang
+    const { count, rows: orders } = await model.orders.findAndCountAll({
       where: { id_user: userId },
-      attributes: ["id_user", "fullname", "email", "phone_number", "address"],
-    });
-    if (!userExist) {
-      return res.status(404).json({ message: "Người dùng không tồn tại" });
-    }
-
-    // 4. Tìm tất cả đơn hàng có trạng thái "pending" hoặc "confirmed"
-    const orders = await model.orders.findAll({
-      where: {
-        id_user: userId,
-        status: { [Op.in]: ["pending", "confirmed"] },
-      },
-    });
-
-    // 5. Nếu không có đơn hàng nào
-    if (!orders || orders.length === 0) {
-      return res.status(404).json({ message: "Không tìm thấy đơn hàng đã đặt" });
-    }
-
-    // 6. Lấy thông tin chi tiết cho từng đơn hàng
-    const orderList = await Promise.all(
-      orders.map(async (order) => {
-        const orderProducts = await model.order_product.findAll({
-          where: { id_order: order.id_order },
+      limit: limitNum,
+      offset: offset,
+      include: [
+        {
+          model: model.user,
+          as: "user",
+          attributes: ["id_user", "fullname", "email", "phone_number", "address"],
+        },
+        {
+          model: model.order_product,
+          as: "order_products",
           include: [
             {
               model: model.product,
               as: "id_product_product",
               attributes: ["title", "size", "price", "discount"],
+              include: [
+                {
+                  model: model.gallery,
+                  as: "gallery",
+                  attributes: ["thumbnail"],
+                },
+              ],
             },
           ],
-        });
+        },
+      ],
+    });
 
-        const totalOrderMoney = orderProducts.reduce(
-          (sum, item) => sum + (item.total_money || 0),
-          0
-        );
+    // 5. Nếu không có đơn hàng nào
+    if (!orders || orders.length === 0) {
+      return res.status(200).json({
+        message: "Không tìm thấy đơn hàng đã đặt",
+        data: [],
+        pagination: {
+          totalItems: count,
+          currentPage: pageNum,
+          pageSize: limitNum,
+          totalPages: Math.ceil(count / limitNum),
+          hasNextPage: pageNum < Math.ceil(count / limitNum),
+          hasPrevPage: pageNum > 1,
+        },
+      });
+    }
 
-        return {
-          order_id: order.id_order,
-          user: {
-            id_user: userExist.id_user,
-            fullname: userExist.fullname,
-            email: userExist.email,
-            phone_number: userExist.phone_number,
-            address: userExist.address,
-          },
-          order_date: order.order_date,
-          status: order.status,
-          note: order.note,
-          total_money: totalOrderMoney,
-          products: orderProducts.map((item) => ({
+    // 6. Lấy thông tin chi tiết cho từng đơn hàng
+    const orderList = orders.map((order) => {
+      const orderData = order.toJSON();
+      const totalOrderMoney = orderData.order_products.reduce(
+        (sum, item) => sum + (item.total_money || 0),
+        0
+      );
+      return {
+        order_id: orderData.id_order,
+        user: {
+          id_user: userExist.id_user,
+          fullname: userExist.fullname,
+          email: userExist.email,
+          phone_number: userExist.phone_number,
+          address: userExist.address,
+        },
+        order_date: orderData.order_date,
+        status: orderData.status,
+        note: orderData.note,
+        total_money: totalOrderMoney,
+        products: orderData.order_products.map((item) => {
+          let thumbnail = item.id_product_product.gallery?.thumbnail || null;
+          if (thumbnail && typeof thumbnail === "string") {
+            try {
+              thumbnail = JSON.parse(thumbnail);
+            } catch (error) {
+              console.error("Lỗi parse thumbnail:", error.message);
+              thumbnail = [];
+            }
+          }
+          return {
             product_id: item.id_product,
             quantity: item.quantity,
             total_money: item.total_money,
@@ -311,16 +417,25 @@ const getOrderList = async (req, res) => {
               size: item.id_product_product.size,
               price: item.id_product_product.price,
               discount: item.id_product_product.discount,
+              thumbnail: thumbnail || [],
             },
-          })),
-        };
-      })
-    );
+          };
+        }),
+      };
+    });
 
-    // 7. Trả về danh sách đơn hàng
+    // 7. Trả về danh sách đơn hàng với phân trang
     return res.status(200).json({
       message: "Lấy danh sách đơn hàng thành công",
       data: orderList,
+      pagination: {
+        totalItems: count,
+        currentPage: pageNum,
+        pageSize: limitNum,
+        totalPages: Math.ceil(count / limitNum),
+        hasNextPage: pageNum < Math.ceil(count / limitNum),
+        hasPrevPage: pageNum > 1,
+      },
     });
   } catch (error) {
     console.error("Lỗi khi lấy danh sách đơn hàng:", error);
@@ -332,90 +447,123 @@ const getOrderList = async (req, res) => {
   }
 };
 
-// Hàm lấy danh sách tất cả đơn hàng của tất cả người dùng
-const getAllOrders = async (req, res) => {
-  try {
-    // 1. Tìm tất cả đơn hàng có trạng thái "pending" hoặc "confirmed"
-    const orders = await model.orders.findAll({
-      where: {
-        status: { [Op.in]: ["pending", "confirmed"] },
-      },
-      include: [
-        {
-          model: model.user,
-          as: "user",
-          attributes: ["id_user", "fullname", "email", "phone_number", "address"],
-        },
-      ],
-    });
+// const getAllOrders = async (req, res) => {
+//   try {
+//     // 1. Kiểm tra và xử lý tham số phân trang
+//     const page = parseInt(req.query.page, 10) || 1;
+//     const limit = parseInt(req.query.limit, 10) || 10;
 
-    // 2. Nếu không có đơn hàng nào
-    if (!orders || orders.length === 0) {
-      return res.status(404).json({ message: "Không tìm thấy đơn hàng đã đặt" });
-    }
+//     if (isNaN(page) || page < 1) {
+//       return res.status(400).json({ message: "Trang phải là số nguyên dương" });
+//     }
+//     if (isNaN(limit) || limit < 1 || limit > 100) {
+//       return res.status(400).json({ message: "Giới hạn phải là số nguyên từ 1 đến 100" });
+//     }
 
-    // 3. Lấy thông tin chi tiết cho từng đơn hàng
-    const orderList = await Promise.all(
-      orders.map(async (order) => {
-        const orderProducts = await model.order_product.findAll({
-          where: { id_order: order.id_order },
-          include: [
-            {
-              model: model.product,
-              as: "id_product_product",
-              attributes: ["title", "size", "price", "discount"],
-            },
-          ],
-        });
+//     const offset = (page - 1) * limit;
 
-        const totalOrderMoney = orderProducts.reduce(
-          (sum, item) => sum + (item.total_money || 0),
-          0
-        );
+//     // 2. Tìm tất cả đơn hàng với phân trang
+//     const result = await model.orders.findAndCountAll({
+//       where: {
+//         status: { [Op.in]: ["pending", "confirmed", "delivering", "delivered", "canceled"] },
+//       },
+//       include: [
+//         {
+//           model: model.user,
+//           as: "user",
+//           attributes: ["id_user", "fullname", "email", "phone_number", "address"],
+//         },
+//       ],
+//       limit,
+//       offset,
+//     });
 
-        return {
-          order_id: order.id_order,
-          user: {
-            id_user: order.user.id_user,
-            fullname: order.user.fullname,
-            email: order.user.email,
-            phone_number: order.user.phone_number,
-            address: order.user.address,
-          },
-          order_date: order.order_date,
-          status: order.status,
-          note: order.note,
-          total_money: totalOrderMoney,
-          products: orderProducts.map((item) => ({
-            product_id: item.id_product,
-            quantity: item.quantity,
-            total_money: item.total_money,
-            product_details: {
-              title: item.id_product_product.title,
-              size: item.id_product_product.size,
-              price: item.id_product_product.price,
-              discount: item.id_product_product.discount,
-            },
-          })),
-        };
-      })
-    );
+//     const orders = result.rows;
+//     const totalItems = result.count;
 
-    // 4. Trả về danh sách đơn hàng
-    return res.status(200).json({
-      message: "Lấy danh sách tất cả đơn hàng thành công",
-      data: orderList,
-    });
-  } catch (error) {
-    console.error("Lỗi khi lấy danh sách tất cả đơn hàng:", error);
-    return res.status(500).json({
-      message: "Lỗi server khi lấy danh sách tất cả đơn hàng",
-      error: error.message,
-      stack: error.stack,
-    });
-  }
-};
+//     // 3. Nếu không có đơn hàng nào
+//     if (!orders || orders.length === 0) {
+//       return res.status(404).json({ message: "Không tìm thấy đơn hàng đã đặt" });
+//     }
 
+//     // 4. Lấy thông tin chi tiết cho từng đơn hàng
+//     const orderList = await Promise.all(
+//       orders.map(async (order) => {
+//         const orderProducts = await model.order_product.findAll({
+//           where: { id_order: order.id_order },
+//           include: [
+//             {
+//               model: model.product,
+//               as: "id_product_product",
+//               attributes: ["title", "size", "price", "discount"],
+//             },
+//           ],
+//         });
+
+//         const totalOrderMoney = orderProducts.reduce(
+//           (sum, item) => sum + (item.total_money || 0),
+//           0
+//         );
+
+//         return {
+//           order_id: order.id_order,
+//           user: {
+//             id_user: order.user.id_user,
+//             fullname: order.user.fullname,
+//             email: order.user.email,
+//             phone_number: order.user.phone_number,
+//             address: order.user.address,
+//           },
+//           order_date: order.order_date,
+//           status: order.status,
+//           note: order.note,
+//           total_money: totalOrderMoney,
+//           products: orderProducts.map((item) => ({
+//             product_id: item.id_product,
+//             quantity: item.quantity,
+//             total_money: item.total_money,
+//             product_details: {
+//               title: item.id_product_product.title,
+//               size: item.id_product_product.size,
+//               price: item.id_product_product.price,
+//               discount: item.id_product_product.discount,
+//             },
+//           })),
+//         };
+//       })
+//     );
+
+//     // 5. Tính toán thông tin phân trang
+//     const totalPages = Math.ceil(totalItems / limit);
+//     const pagination = {
+//       currentPage: page,
+//       pageSize: limit,
+//       totalItems,
+//       totalPages,
+//       hasNextPage: page < totalPages,
+//       hasPrevPage: page > 1,
+//     };
+
+//     // 6. Trả về danh sách đơn hàng với thông tin phân trang
+//     return res.status(200).json({
+//       message: "Lấy danh sách tất cả đơn hàng thành công",
+//       data: orderList,
+//       pagination,
+//     });
+//   } catch (error) {
+//     console.error("Lỗi khi lấy danh sách tất cả đơn hàng:", error);
+//     return res.status(500).json({
+//       message: "Lỗi server khi lấy danh sách tất cả đơn hàng",
+//       error: error.message,
+//       stack: error.stack,
+//     });
+//   }
+// };
+
+
+
+
+// Hàm hủy đơn hàng
 // Hàm hủy đơn hàng
 const cancelOrder = async (req, res) => {
   try {
@@ -467,8 +615,10 @@ const cancelOrder = async (req, res) => {
     }
 
     // 6. Kiểm tra trạng thái đơn hàng
-    if (order.status !== "pending") {
-      return res.status(400).json({ message: "Chỉ có thể hủy đơn hàng đang ở trạng thái 'pending'" });
+    if (order.status !== "pending" && order.status !== "confirmed") {
+      return res.status(400).json({ 
+        message: `Chỉ có thể hủy đơn hàng ở trạng thái 'pending' hoặc 'confirmed'. Trạng thái hiện tại: ${order.status}` 
+      });
     }
 
     // 7. Cập nhật trạng thái đơn hàng thành "canceled"
@@ -483,6 +633,13 @@ const cancelOrder = async (req, res) => {
           model: model.product,
           as: "id_product_product",
           attributes: ["title", "size", "price", "discount"],
+          include: [
+            {
+              model: model.gallery,
+              as: "gallery",
+              attributes: ["thumbnail"],
+            },
+          ],
         },
       ],
     });
@@ -508,17 +665,29 @@ const cancelOrder = async (req, res) => {
         status: order.status,
         note: order.note,
         total_money: totalOrderMoney,
-        products: orderProducts.map((item) => ({
-          product_id: item.id_product,
-          quantity: item.quantity,
-          total_money: item.total_money,
-          product_details: {
-            title: item.id_product_product.title,
-            size: item.id_product_product.size,
-            price: item.id_product_product.price,
-            discount: item.id_product_product.discount,
-          },
-        })),
+        products: orderProducts.map((item) => {
+          let thumbnail = item.id_product_product.gallery?.thumbnail || null;
+          if (thumbnail && typeof thumbnail === "string") {
+            try {
+              thumbnail = JSON.parse(thumbnail);
+            } catch (error) {
+              console.error("Lỗi parse thumbnail:", error.message);
+              thumbnail = [];
+            }
+          }
+          return {
+            product_id: item.id_product,
+            quantity: item.quantity,
+            total_money: item.total_money,
+            product_details: {
+              title: item.id_product_product.title,
+              size: item.id_product_product.size,
+              price: item.id_product_product.price,
+              discount: item.id_product_product.discount,
+              thumbnail: thumbnail || [],
+            },
+          };
+        }),
       },
     });
   } catch (error) {
@@ -575,6 +744,13 @@ const deleteOrder = async (req, res) => {
           model: model.product,
           as: "id_product_product",
           attributes: ["title", "size", "price", "discount"],
+          include: [
+            {
+              model: model.gallery,
+              as: "gallery",
+              attributes: ["thumbnail"],
+            },
+          ],
         },
       ],
     });
@@ -611,17 +787,29 @@ const deleteOrder = async (req, res) => {
         status: order.status,
         note: order.note,
         total_money: totalOrderMoney,
-        products: orderProducts.map((item) => ({
-          product_id: item.id_product,
-          quantity: item.quantity,
-          total_money: item.total_money,
-          product_details: {
-            title: item.id_product_product.title,
-            size: item.id_product_product.size,
-            price: item.id_product_product.price,
-            discount: item.id_product_product.discount,
-          },
-        })),
+        products: orderProducts.map((item) => {
+          let thumbnail = item.id_product_product.gallery?.thumbnail || null;
+          if (thumbnail && typeof thumbnail === "string") {
+            try {
+              thumbnail = JSON.parse(thumbnail);
+            } catch (error) {
+              console.error("Lỗi parse thumbnail:", error.message);
+              thumbnail = [];
+            }
+          }
+          return {
+            product_id: item.id_product,
+            quantity: item.quantity,
+            total_money: item.total_money,
+            product_details: {
+              title: item.id_product_product.title,
+              size: item.id_product_product.size,
+              price: item.id_product_product.price,
+              discount: item.id_product_product.discount,
+              thumbnail: thumbnail || [],
+            },
+          };
+        }),
       },
     });
   } catch (error) {
@@ -634,10 +822,12 @@ const deleteOrder = async (req, res) => {
   }
 };
 
-// Hàm cập nhật trạng thái đơn hàng thành "confirmed"
+// Hàm cập nhật trạng thái đơn hàng thành "confirmed", "delivering", "delivered" hoặc "failed"
 const confirmOrder = async (req, res) => {
   try {
     const { id_order } = req.params; // Lấy id_order từ URL params
+    const body = req.body || {}; // Đảm bảo req.body không undefined
+    const { deliveryStatus } = body; // Phân rã an toàn
 
     // 1. Kiểm tra dữ liệu đầu vào
     if (!id_order) {
@@ -665,13 +855,34 @@ const confirmOrder = async (req, res) => {
       return res.status(404).json({ message: "Không tìm thấy đơn hàng" });
     }
 
-    // 3. Kiểm tra trạng thái đơn hàng
-    if (order.status !== "pending") {
-      return res.status(400).json({ message: "Chỉ có thể xác nhận đơn hàng đang ở trạng thái 'pending'" });
+    // 3. Kiểm tra và cập nhật trạng thái đơn hàng
+    if (order.status === "pending") {
+      order.status = "confirmed";
+    } else if (order.status === "confirmed") {
+      order.status = "delivering";
+    } else if (order.status === "delivering") {
+      // Kiểm tra deliveryStatus khi trạng thái là delivering
+      if (!deliveryStatus) {
+        return res.status(400).json({ 
+          message: "Vui lòng cung cấp deliveryStatus (success hoặc failed) khi đơn hàng đang ở trạng thái delivering" 
+        });
+      }
+      if (deliveryStatus === "success") {
+        order.status = "delivered";
+      } else if (deliveryStatus === "failed") {
+        order.status = "failed";
+      } else {
+        return res.status(400).json({ 
+          message: "deliveryStatus không hợp lệ, phải là 'success' hoặc 'failed'" 
+        });
+      }
+    } else {
+      return res.status(400).json({ 
+        message: `Không thể xác nhận đơn hàng với trạng thái hiện tại: ${order.status}` 
+      });
     }
 
-    // 4. Cập nhật trạng thái đơn hàng thành "confirmed"
-    order.status = "confirmed";
+    // 4. Lưu trạng thái đơn hàng đã cập nhật
     await order.save();
 
     // 5. Lấy chi tiết đơn hàng (order_product)
@@ -682,6 +893,13 @@ const confirmOrder = async (req, res) => {
           model: model.product,
           as: "id_product_product",
           attributes: ["title", "size", "price", "discount"],
+          include: [
+            {
+              model: model.gallery,
+              as: "gallery",
+              attributes: ["thumbnail"],
+            },
+          ],
         },
       ],
     });
@@ -694,7 +912,7 @@ const confirmOrder = async (req, res) => {
 
     // 7. Trả về thông tin chi tiết đơn hàng
     return res.status(200).json({
-      message: "Xác nhận đơn hàng thành công",
+      message: "Cập nhật trạng thái đơn hàng thành công",
       data: {
         order_id: order.id_order,
         user: {
@@ -708,17 +926,29 @@ const confirmOrder = async (req, res) => {
         status: order.status,
         note: order.note,
         total_money: totalOrderMoney,
-        products: orderProducts.map((item) => ({
-          product_id: item.id_product,
-          quantity: item.quantity,
-          total_money: item.total_money,
-          product_details: {
-            title: item.id_product_product.title,
-            size: item.id_product_product.size,
-            price: item.id_product_product.price,
-            discount: item.id_product_product.discount,
-          },
-        })),
+        products: orderProducts.map((item) => {
+          let thumbnail = item.id_product_product.gallery?.thumbnail || null;
+          if (thumbnail && typeof thumbnail === "string") {
+            try {
+              thumbnail = JSON.parse(thumbnail);
+            } catch (error) {
+              console.error("Lỗi parse thumbnail:", error.message);
+              thumbnail = [];
+            }
+          }
+          return {
+            product_id: item.id_product,
+            quantity: item.quantity,
+            total_money: item.total_money,
+            product_details: {
+              title: item.id_product_product.title,
+              size: item.id_product_product.size,
+              price: item.id_product_product.price,
+              discount: item.id_product_product.discount,
+              thumbnail: thumbnail || [],
+            },
+          };
+        }),
       },
     });
   } catch (error) {
@@ -731,7 +961,7 @@ const confirmOrder = async (req, res) => {
   }
 };
 
-// Hàm xóa sản phẩm khỏi giỏ hàng (từ bảng order_product và orders nếu cần)
+// Hàm xóa sản phẩm khỏi giỏ hàng
 const removeFromCart = async (req, res) => {
   try {
     const { id_user, id_product } = req.params; // Lấy id_user và id_product từ URL params
@@ -749,7 +979,7 @@ const removeFromCart = async (req, res) => {
       return res.status(400).json({ message: "id_user và id_product phải là số nguyên hợp lệ" });
     }
 
-    // 2. Kiểm tra quyền (đã được xử lý bởi userOnlyMiddleware, nhưng có thể thêm kiểm tra nếu mở rộng quyền sau này)
+    // 2. Kiểm tra quyền
     if (userRole !== "user" && userId !== userIdFromToken) {
       return res.status(403).json({ message: "Bạn không có quyền xóa sản phẩm khỏi giỏ hàng của người dùng khác" });
     }
@@ -765,6 +995,13 @@ const removeFromCart = async (req, res) => {
     // 4. Kiểm tra sản phẩm có tồn tại không
     const productExist = await model.product.findOne({
       where: { id_product: productId },
+      include: [
+        {
+          model: model.gallery,
+          as: "gallery",
+          attributes: ["thumbnail"],
+        },
+      ],
     });
     if (!productExist) {
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
@@ -792,7 +1029,18 @@ const removeFromCart = async (req, res) => {
       return res.status(404).json({ message: "Sản phẩm không có trong giỏ hàng của bạn" });
     }
 
-    // 7. Xóa sản phẩm khỏi bảng order_product
+    // 7. Xử lý thumbnail
+    let thumbnail = productExist.gallery?.thumbnail || null;
+    if (thumbnail && typeof thumbnail === "string") {
+      try {
+        thumbnail = JSON.parse(thumbnail);
+      } catch (error) {
+        console.error("Lỗi parse thumbnail:", error.message);
+        thumbnail = [];
+      }
+    }
+
+    // 8. Xóa sản phẩm khỏi bảng order_product
     await model.order_product.destroy({
       where: {
         id_order: cartOrder.id_order,
@@ -800,7 +1048,7 @@ const removeFromCart = async (req, res) => {
       },
     });
 
-    // 8. Kiểm tra xem đơn hàng còn sản phẩm nào không
+    // 9. Kiểm tra xem đơn hàng còn sản phẩm nào không
     const remainingProducts = await model.order_product.findAll({
       where: { id_order: cartOrder.id_order },
     });
@@ -811,12 +1059,19 @@ const removeFromCart = async (req, res) => {
       });
     }
 
-    // 9. Trả về thông báo thành công
+    // 10. Trả về thông báo thành công
     return res.status(200).json({
       message: "Xóa sản phẩm khỏi giỏ hàng thành công",
       data: {
         id_user: userId,
-        id_product: productId,
+        product_id: productId,
+        product_details: {
+          title: productExist.title,
+          size: productExist.size,
+          price: productExist.price,
+          discount: productExist.discount,
+          thumbnail: thumbnail || [],
+        },
       },
     });
   } catch (error) {
@@ -829,160 +1084,7 @@ const removeFromCart = async (req, res) => {
   }
 };
 
-const getOrderByKeyword = async (req, res) => {
-  try {
-    const { keyword } = req.params;
-    const { page = 1, limit = 10 } = req.query;
-    const trimmedKeyword = keyword.trim().toLowerCase();
 
-    if (!trimmedKeyword) {
-      return res.status(400).json({ message: "Từ khóa tìm kiếm không được để trống" });
-    }
-
-    const offset = (page - 1) * limit;
-
-    // Điều kiện tìm kiếm cho product
-    const productConditions = {
-      [Op.or]: [
-        { title: { [Op.like]: `%${trimmedKeyword}%` } },
-        { description: { [Op.like]: `%${trimmedKeyword}%` } },
-        { size: { [Op.like]: `%${trimmedKeyword}%` } },
-      ],
-    };
-
-    // Truy vấn tìm kiếm
-    const { count, rows: orders } = await model.orders.findAndCountAll({
-      where: {},
-      include: [
-        {
-          model: model.user,
-          as: "user",
-          attributes: ["id_user", "fullname", "email", "phone_number", "address"],
-          required: false,
-        },
-        {
-          model: model.order_product,
-          as: "order_products",
-          required: false,
-          include: [
-            {
-              model: model.product,
-              as: "id_product_product",
-              attributes: ["id_product", "title", "description", "size", "price"],
-              where: productConditions,
-              required: false,
-            },
-          ],
-        },
-      ],
-      limit: parseInt(limit),
-      offset: parseInt(offset),
-      distinct: true,
-    });
-
-    // Log toàn bộ dữ liệu orders để kiểm tra
-    console.log("Raw orders data:", JSON.stringify(orders, null, 2));
-
-    // Lọc thủ công các đơn hàng khớp với từ khóa
-    const filteredOrders = orders.filter(order => {
-      const orderData = order.toJSON();
-      const products = orderData.order_products || [];
-      const totalOrderMoney = products.reduce((sum, item) => sum + (item.total_money || 0), 0);
-
-      // Kiểm tra từ khóa trong các trường của orders
-      const matchesOrderConditions =
-        order.note?.toLowerCase().includes(trimmedKeyword) ||
-        order.status?.toLowerCase().includes(trimmedKeyword) ||
-        format(new Date(order.order_date), "dd/MM/yyyy HH:mm").toLowerCase().includes(trimmedKeyword) ||
-        (!isNaN(parseInt(trimmedKeyword)) && order.id_order === parseInt(trimmedKeyword)) ||
-        totalOrderMoney.toString().includes(trimmedKeyword);
-
-      // Kiểm tra từ khóa trong các trường của user
-      const matchesUserConditions = order.user && (
-        order.user.fullname?.toLowerCase().includes(trimmedKeyword) ||
-        order.user.email?.toLowerCase().includes(trimmedKeyword) ||
-        order.user.phone_number?.toLowerCase().includes(trimmedKeyword) ||
-        order.user.address?.toLowerCase().includes(trimmedKeyword)
-      );
-
-      // Kiểm tra từ khóa trong các trường của product
-      const matchesProductConditions = products.some(op => {
-        if (!op.id_product_product) return false;
-        const product = op.id_product_product;
-        console.log("Product data in matchesProductConditions:", product);
-        return (
-          product.title?.toLowerCase().includes(trimmedKeyword) ||
-          product.description?.toLowerCase().includes(trimmedKeyword) ||
-          product.size?.toLowerCase().includes(trimmedKeyword)
-        );
-      });
-
-      // Trả về đơn hàng nếu khớp với bất kỳ điều kiện nào
-      return matchesOrderConditions || matchesUserConditions || matchesProductConditions;
-    });
-
-    if (!filteredOrders || filteredOrders.length === 0) {
-      return res.status(200).json({
-        message: "Không tìm thấy đơn hàng nào với từ khóa này",
-        data: [],
-        pagination: {
-          totalItems: 0,
-          currentPage: parseInt(page),
-          pageSize: parseInt(limit),
-          totalPages: 0,
-        },
-      });
-    }
-
-    const orderList = filteredOrders.map((order) => {
-      const orderData = order.toJSON();
-      const products = orderData.order_products || [];
-      const totalOrderMoney = products.reduce((sum, item) => sum + (item.total_money || 0), 0);
-      return {
-        order_id: orderData.id_order,
-        user: orderData.user || null,
-        order_date: orderData.order_date,
-        status: orderData.status,
-        note: orderData.note,
-        total_money: totalOrderMoney,
-        products: products.map((item) => {
-          console.log("Product details for item in orderList:", item.id_product_product);
-          return {
-            product_id: item.id_product,
-            quantity: item.quantity,
-            total_money: item.total_money,
-            product_details: item.id_product_product
-              ? {
-                  title: item.id_product_product.title || "Không có tiêu đề",
-                  description: item.id_product_product.description || "",
-                  size: item.id_product_product.size || "",
-                  price: item.id_product_product.price || 0,
-                }
-              : {},
-          };
-        }),
-      };
-    });
-
-    return res.status(200).json({
-      message: "Lấy danh sách đơn hàng theo từ khóa thành công",
-      data: orderList,
-      pagination: {
-        totalItems: filteredOrders.length,
-        currentPage: parseInt(page),
-        pageSize: parseInt(limit),
-        totalPages: Math.ceil(filteredOrders.length / limit),
-      },
-    });
-  } catch (error) {
-    console.error("Lỗi khi tìm kiếm đơn hàng theo từ khóa:", error);
-    return res.status(500).json({
-      message: "Lỗi server khi tìm kiếm đơn hàng",
-      error: error.message,
-      stack: error.stack,
-    });
-  }
-};
 
 // Hàm lấy danh sách đơn hàng theo trạng thái
 const getOrderByStatus = async (req, res) => {
@@ -990,11 +1092,11 @@ const getOrderByStatus = async (req, res) => {
     const { status } = req.params;
     const { page = 1, limit = 10 } = req.query;
 
-    if (!status || !["pending", "confirmed", "canceled"].includes(status)) {
-      return res.status(400).json({ message: "Trạng thái không hợp lệ (phải là pending, confirmed hoặc canceled)" });
+    if (!status || !["pending", "confirmed", "delivering", "delivered","failed", "canceled"].includes(status)) {
+      return res.status(400).json({ message: "Trạng thái không hợp lệ (phải là pending, confirmed, delivering, delivered hoặc canceled)" });
     }
 
-    const offset = (page - 1) * limit;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
 
     const { count, rows: orders } = await model.orders.findAndCountAll({
       where: { status },
@@ -1007,12 +1109,19 @@ const getOrderByStatus = async (req, res) => {
         {
           model: model.order_product,
           as: "order_products",
-          required: false, // Cho phép đơn hàng không có sản phẩm
+          required: false,
           include: [
             {
               model: model.product,
               as: "id_product_product",
               attributes: ["title", "size", "price", "discount"],
+              include: [
+                {
+                  model: model.gallery,
+                  as: "gallery",
+                  attributes: ["thumbnail"],
+                },
+              ],
             },
           ],
         },
@@ -1048,19 +1157,31 @@ const getOrderByStatus = async (req, res) => {
         status: orderData.status,
         note: orderData.note,
         total_money: totalOrderMoney,
-        products: products.map((item) => ({
-          product_id: item.id_product,
-          quantity: item.quantity,
-          total_money: item.total_money,
-          product_details: item.id_product_product
-            ? {
-                title: item.id_product_product.title,
-                size: item.id_product_product.size,
-                price: item.id_product_product.price,
-                discount: item.id_product_product.discount,
-              }
-            : {},
-        })),
+        products: products.map((item) => {
+          let thumbnail = item.id_product_product.gallery?.thumbnail || null;
+          if (thumbnail && typeof thumbnail === "string") {
+            try {
+              thumbnail = JSON.parse(thumbnail);
+            } catch (error) {
+              console.error("Lỗi parse thumbnail:", error.message);
+              thumbnail = [];
+            }
+          }
+          return {
+            product_id: item.id_product,
+            quantity: item.quantity,
+            total_money: item.total_money,
+            product_details: item.id_product_product
+              ? {
+                  title: item.id_product_product.title,
+                  size: item.id_product_product.size,
+                  price: item.id_product_product.price,
+                  discount: item.id_product_product.discount,
+                  thumbnail: thumbnail || [],
+                }
+              : {},
+          };
+        }),
       };
     });
 
@@ -1084,6 +1205,145 @@ const getOrderByStatus = async (req, res) => {
   }
 };
 
+// Hàm lấy đơn hàng theo mã đơn hàng với phân trang cho danh sách sản phẩm
+const GetOrderByID = async (req, res) => {
+  try {
+    const { id_order } = req.params; // Lấy id_order từ params
+    const { page = 1, limit = 10 } = req.query; // Lấy page, limit từ query
+    const userIdFromToken = req.user.id_user; // Lấy id_user từ token
+    const userRole = req.user.role; // Lấy role từ token
+
+    // 1. Kiểm tra dữ liệu đầu vào
+    const orderId = parseInt(id_order, 10);
+    if (isNaN(orderId)) {
+      return res.status(400).json({ message: "Mã đơn hàng phải là số nguyên hợp lệ" });
+    }
+
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
+
+    if (isNaN(pageNum) || pageNum < 1) {
+      return res.status(400).json({ message: "Trang phải là số nguyên dương" });
+    }
+    if (isNaN(limitNum) || limitNum < 1 || limitNum > 100) {
+      return res.status(400).json({ message: "Giới hạn phải là số nguyên từ 1 đến 100" });
+    }
+
+    const offset = (pageNum - 1) * limitNum;
+
+    // 2. Tìm đơn hàng
+    const order = await model.orders.findOne({
+      where: { id_order: orderId },
+      include: [
+        {
+          model: model.user,
+          as: "user",
+          attributes: ["id_user", "fullname", "email", "phone_number", "address"],
+        },
+      ],
+    });
+
+    if (!order) {
+      return res.status(404).json({ message: "Đơn hàng không tồn tại" });
+    }
+
+    // 3. Kiểm tra quyền: nếu không phải admin và id_user không khớp với id_user trong token
+    if (userRole !== "admin" && order.id_user !== userIdFromToken) {
+      return res.status(403).json({ message: "Bạn không có quyền xem đơn hàng này" });
+    }
+
+    // 4. Lấy danh sách sản phẩm trong đơn hàng với phân trang
+    const { count, rows: orderProducts } = await model.order_product.findAndCountAll({
+      where: { id_order: orderId },
+      limit: limitNum,
+      offset: offset,
+      include: [
+        {
+          model: model.product,
+          as: "id_product_product",
+          attributes: ["title", "size", "price", "discount"],
+          include: [
+            {
+              model: model.gallery,
+              as: "gallery",
+              attributes: ["thumbnail"],
+            },
+          ],
+        },
+      ],
+    });
+
+    // 5. Tính tổng tiền của đơn hàng
+    const totalOrderMoney = orderProducts.reduce(
+      (sum, item) => sum + (item.total_money || 0),
+      0
+    );
+
+    // 6. Chuẩn bị dữ liệu trả về
+    const orderData = {
+      order_id: order.id_order,
+      user: {
+        id_user: order.user.id_user,
+        fullname: order.user.fullname,
+        email: order.user.email,
+        phone_number: order.user.phone_number,
+        address: order.user.address,
+      },
+      order_date: order.order_date,
+      status: order.status,
+      note: order.note,
+      total_money: totalOrderMoney,
+      products: orderProducts.map((item) => {
+        let thumbnail = item.id_product_product.gallery?.thumbnail || null;
+        if (thumbnail && typeof thumbnail === "string") {
+          try {
+            thumbnail = JSON.parse(thumbnail);
+          } catch (error) {
+            console.error("Lỗi parse thumbnail:", error.message);
+            thumbnail = [];
+          }
+        }
+        return {
+          product_id: item.id_product,
+          quantity: item.quantity,
+          total_money: item.total_money,
+          product_details: {
+            title: item.id_product_product.title,
+            size: item.id_product_product.size,
+            price: item.id_product_product.price,
+            discount: item.id_product_product.discount,
+            thumbnail: thumbnail || [],
+          },
+        };
+      }),
+    };
+
+    // 7. Tạo thông tin phân trang
+    const pagination = {
+      totalItems: count,
+      currentPage: pageNum,
+      pageSize: limitNum,
+      totalPages: Math.ceil(count / limitNum),
+      hasNextPage: pageNum < Math.ceil(count / limitNum),
+      hasPrevPage: pageNum > 1,
+    };
+
+    // 8. Trả về kết quả
+    return res.status(200).json({
+      message: "Lấy thông tin đơn hàng thành công",
+      data: orderData,
+      pagination,
+    });
+  } catch (error) {
+    console.error("Lỗi khi lấy thông tin đơn hàng:", error);
+    return res.status(500).json({
+      message: "Lỗi server khi lấy thông tin đơn hàng",
+      error: error.message,
+      stack: error.stack,
+    });
+  }
+};
+
 // Export các hàm
-export { addToCart, placeOrder, getOrderList, getAllOrders, cancelOrder, deleteOrder, confirmOrder, removeFromCart,getOrderByKeyword,
-  getOrderByStatus, };
+export { addToCart, placeOrder, getOrderByKeyWordUser,  cancelOrder, deleteOrder, confirmOrder, removeFromCart,
+  getOrderByStatus,GetOrderByID, };

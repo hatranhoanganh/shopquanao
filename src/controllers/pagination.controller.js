@@ -108,6 +108,13 @@ const getPaginatedData = async (req, res) => {
                 model: model.product,
                 as: "id_product_product",
                 attributes: ["title", "size", "price", "discount"],
+                include: [
+                  {
+                    model: model.gallery,
+                    as: "gallery",
+                    attributes: ["thumbnail"],
+                  },
+                ],
               },
             ],
           },
@@ -127,17 +134,29 @@ const getPaginatedData = async (req, res) => {
           status: orderData.status,
           note: orderData.note,
           total_money: totalOrderMoney,
-          products: orderData.order_products.map((item) => ({
-            product_id: item.id_product,
-            quantity: item.quantity,
-            total_money: item.total_money,
-            product_details: {
-              title: item.id_product_product.title,
-              size: item.id_product_product.size,
-              price: item.id_product_product.price,
-              discount: item.id_product_product.discount,
-            },
-          })),
+          products: orderData.order_products.map((item) => {
+            let thumbnail = item.id_product_product.gallery?.thumbnail || null;
+            if (thumbnail && typeof thumbnail === "string") {
+              try {
+                thumbnail = JSON.parse(thumbnail);
+              } catch (error) {
+                console.error("Lỗi parse thumbnail:", error.message);
+                thumbnail = [];
+              }
+            }
+            return {
+              product_id: item.id_product,
+              quantity: item.quantity,
+              total_money: item.total_money,
+              product_details: {
+                title: item.id_product_product.title,
+                size: item.id_product_product.size,
+                price: item.id_product_product.price,
+                discount: item.id_product_product.discount,
+                thumbnail: thumbnail || [],
+              },
+            };
+          }),
         };
       });
       totalItems = result.count;
