@@ -70,28 +70,31 @@ const deleteProduct = async (req, res) => {
 
     // Kiểm tra xem sản phẩm có trong đơn hàng với trạng thái "pending", "confirmed", hoặc "delivering"
     const restrictedStatuses = ["pending", "confirmed", "delivering"];
+    console.log("Checking product with id:", id_product); // Debug
     const orderProducts = await model.order_product.findOne({
       where: { id_product },
       include: [
         {
           model: model.orders,
-          as: "id_order_order",
+          as: "order", // Sửa alias từ "id_order_order" thành "order"
           where: {
             status: {
               [Op.in]: restrictedStatuses,
             },
           },
-          required: true, // Chỉ trả về nếu có match
+          required: true,
         },
       ],
     });
 
     if (orderProducts) {
+      console.log("Product found in restricted order:", orderProducts.toJSON()); // Debug
       return res.status(400).json({
         message: "Sản phẩm đang được khách đặt nên không thể xóa",
       });
     }
 
+    console.log("No restrictions found, proceeding to delete product:", id_product); // Debug
     // Xóa các bản ghi liên quan trong bảng order_product
     await model.order_product.destroy({
       where: { id_product },
@@ -113,7 +116,7 @@ const deleteProduct = async (req, res) => {
 
     return res.status(200).json({ message: "Xóa sản phẩm thành công!" });
   } catch (error) {
-    console.error("Error deleting product:", error.message);
+    console.error("Error deleting product - Details:", error); // Debug chi tiết
     return res.status(500).json({
       message: "Error deleting product",
       error: error.message,
