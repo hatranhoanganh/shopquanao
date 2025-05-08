@@ -68,7 +68,31 @@ const deleteProduct = async (req, res) => {
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
     }
 
-    // Xóa các bản ghi liên quan trong bảng gallery
+    // Kiểm tra xem sản phẩm có trong đơn hàng với trạng thái "pending", "confirmed", hoặc "delivering"
+    const restrictedStatuses = ["pending", "confirmed", "delivering"];
+    const orderProducts = await model.order_product.findOne({
+      where: { id_product },
+      include: [
+        {
+          model: model.orders,
+          as: "id_order_order",
+          where: {
+            status: {
+              [Op.in]: restrictedStatuses,
+            },
+          },
+          required: true, // Chỉ trả về nếu có match
+        },
+      ],
+    });
+
+    if (orderProducts) {
+      return res.status(400).json({
+        message: "Sản phẩm đang được khách đặt nên không thể xóa",
+      });
+    }
+
+    // Xóa các bản ghi liên quan trong bảng order_product
     await model.order_product.destroy({
       where: { id_product },
     });
@@ -90,7 +114,7 @@ const deleteProduct = async (req, res) => {
     return res.status(200).json({ message: "Xóa sản phẩm thành công!" });
   } catch (error) {
     console.error("Error deleting product:", error.message);
-    return res.status(400).json({
+    return res.status(500).json({
       message: "Error deleting product",
       error: error.message,
     });
