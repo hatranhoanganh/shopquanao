@@ -16,9 +16,9 @@ import { getAllCategory } from "../controllers/category.controller.js";
 const productRoutes = express.Router();
 
 // Routes chỉ dành cho admin (cần authMiddleware và adminMiddleware)
-productRoutes.post("/ThemSanPham", addProduct);
+productRoutes.post("/ThemSanPham", upload.none(), addProduct); // Áp dụng upload.none()
 productRoutes.delete("/XoaSanPham/:id_product", deleteProduct);
-productRoutes.put("/CapNhatSanPham/:id_product", updateProduct);
+productRoutes.put("/CapNhatSanPham/:id_product", upload.none(), updateProduct); // Áp dụng upload.none()
 
 // Routes cho tất cả người dùng đã đăng nhập (chỉ cần authMiddleware)
 productRoutes.get("/LayDanhSachSanPham", (req, res) => {
