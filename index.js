@@ -11,12 +11,26 @@ console.log("REFRESH_TOKEN_SECRET:", process.env.REFRESH_TOKEN_SECRET);
 
 const app = express();
 
+// Danh sách các origin được phép
+const allowedOrigins = [
+  "http://localhost:5173", // Môi trường development
+  "https://shopquanao-f7yd.onrender.com", // Thay bằng domain của client trong production
+];
+
 app.set("query parser", "extended");
 app.use(express.static("public"));
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error("Not allowed by CORS"));
+    },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
