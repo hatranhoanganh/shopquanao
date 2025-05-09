@@ -126,27 +126,30 @@ const loginUser = async (req, res) => {
       });
     }
 
-    console.log("ACCESS_TOKEN_SECRET in loginUser:", process.env.ACCESS_TOKEN_SECRET);
-    console.log("REFRESH_TOKEN_SECRET in loginUser:", process.env.REFRESH_TOKEN_SECRET);
-
+    // Tạo access token
     const accessToken = jwt.sign(
       { id_user: user.id_user, email: user.email, role: user.role },
       ACCESS_TOKEN_SECRET,
-      { expiresIn: "30s" }
+      { expiresIn: "1m" } // Tăng lên 1 phút để dễ debug
     );
+    console.log("Access token created:", accessToken);
 
+    // Tạo refresh token
     const refreshToken = jwt.sign(
       { id_user: user.id_user, email: user.email, role: user.role },
       REFRESH_TOKEN_SECRET,
-      { expiresIn: "60s" }
+      { expiresIn: "7d" } // 7 ngày để mô phỏng thời gian sống dài
     );
+    console.log("Refresh token created:", refreshToken);
 
+    // Lưu refresh token vào cookie
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "Strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 ngày
     });
+    console.log("Refresh token cookie set");
 
     const userData = {
       id_user: user.id_user,
@@ -177,23 +180,31 @@ const refreshToken = async (req, res) => {
   try {
     const refreshToken = req.cookies.refreshToken;
 
+    console.log("Received refresh token:", refreshToken);
+
     if (!refreshToken) {
+      console.log("No refresh token provided");
       return res.status(401).json({ message: "Vui lòng cung cấp refresh token" });
     }
 
     try {
       const decoded = jwt.verify(refreshToken, REFRESH_TOKEN_SECRET);
+      console.log("Refresh token verified, decoded:", decoded);
+
       const newAccessToken = jwt.sign(
         { id_user: decoded.id_user, email: decoded.email, role: decoded.role },
         ACCESS_TOKEN_SECRET,
-        { expiresIn: "30s" }
+        { expiresIn: "1m" } // Phù hợp với access token
       );
+
+      console.log("New access token generated:", newAccessToken);
 
       return res.status(200).json({
         message: "Làm mới token thành công",
         accessToken: newAccessToken,
       });
     } catch (error) {
+      console.error("Refresh token verification failed:", error.message);
       return res.status(403).json({ message: "Refresh token không hợp lệ hoặc đã hết hạn" });
     }
   } catch (error) {
