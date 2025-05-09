@@ -209,7 +209,9 @@ const addProduct = async (req, res) => {
       name: category.name, // Lấy tên danh mục
       gallery: {
         id_gallery: gallery.id_gallery,
-        thumbnail: gallery.thumbnail, // Lấy thumbnail từ gallery
+        thumbnail: typeof gallery.thumbnail === "string" 
+          ? JSON.parse(gallery.thumbnail) 
+          : gallery.thumbnail, // Chuyển chuỗi JSON thành mảng hoặc giữ nguyên nếu đã là mảng
       },
       title: newProduct.title,
       price: newProduct.price,
@@ -302,7 +304,9 @@ const updateProduct = async (req, res) => {
       name: category.name, // Lấy tên danh mục
       gallery: {
         id_gallery: gallery.id_gallery,
-        thumbnail: gallery.thumbnail, // Lấy thumbnail từ gallery
+        thumbnail: typeof gallery.thumbnail === "string" 
+          ? JSON.parse(gallery.thumbnail) 
+          : gallery.thumbnail, // Chuyển chuỗi JSON thành mảng hoặc giữ nguyên nếu đã là mảng
       },
       title: product.title,
       price: product.price,
