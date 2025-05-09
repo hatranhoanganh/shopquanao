@@ -126,29 +126,29 @@ const loginUser = async (req, res) => {
       });
     }
 
-    console.log("ACCESS_TOKEN_SECRET:", process.env.ACCESS_TOKEN_SECRET);
-    console.log("REFRESH_TOKEN_SECRET:", process.env.REFRESH_TOKEN_SECRET);
+    console.log("ACCESS_TOKEN_SECRET:", ACCESS_TOKEN_SECRET);
+    console.log("REFRESH_TOKEN_SECRET:", REFRESH_TOKEN_SECRET);
 
     const accessToken = jwt.sign(
       { id_user: user.id_user, email: user.email, role: user.role },
-      process.env.ACCESS_TOKEN_SECRET,
-      { expiresIn: "30d" } 
+      ACCESS_TOKEN_SECRET,
+      { expiresIn: "1h" } // Giảm xuống 1 giờ để dễ kiểm tra
     );
     console.log("Access token created:", accessToken);
 
     const refreshToken = jwt.sign(
       { id_user: user.id_user, email: user.email, role: user.role },
-      process.env.REFRESH_TOKEN_SECRET,
-      { expiresIn: "90d" } 
+      REFRESH_TOKEN_SECRET,
+      { expiresIn: "7d" } // 7 ngày
     );
     console.log("Refresh token created:", refreshToken);
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "Strict",
+      secure: process.env.NODE_ENV === "production" ? true : false, // Tắt secure trong dev
+      sameSite: process.env.NODE_ENV === "production" ? "Strict" : "Lax", // Linh hoạt hơn trong dev
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 ngày
-      path: "/", // Đảm bảo cookie có sẵn cho tất cả các route
+      path: "/",
     });
     console.log("Refresh token cookie set");
 
@@ -182,7 +182,7 @@ const refreshToken = async (req, res) => {
     const refreshToken = req.cookies.refreshToken;
 
     console.log("Received refresh token:", refreshToken);
-    console.log("REFRESH_TOKEN_SECRET in refreshToken:", process.env.REFRESH_TOKEN_SECRET);
+    console.log("REFRESH_TOKEN_SECRET:", REFRESH_TOKEN_SECRET);
 
     if (!refreshToken) {
       console.log("No refresh token provided");
@@ -190,13 +190,13 @@ const refreshToken = async (req, res) => {
     }
 
     try {
-      const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
+      const decoded = jwt.verify(refreshToken, REFRESH_TOKEN_SECRET);
       console.log("Refresh token verified, decoded:", decoded);
 
       const newAccessToken = jwt.sign(
         { id_user: decoded.id_user, email: decoded.email, role: decoded.role },
-        process.env.ACCESS_TOKEN_SECRET,
-        { expiresIn: "90d" }
+        ACCESS_TOKEN_SECRET,
+        { expiresIn: "1h" } // 1 giờ
       );
       console.log("New access token generated:", newAccessToken);
 
@@ -206,7 +206,10 @@ const refreshToken = async (req, res) => {
       });
     } catch (error) {
       console.error("Refresh token verification failed:", error.message);
-      return res.status(403).json({ message: "Refresh token không hợp lệ hoặc đã hết hạn" });
+      return res.status(403).json({
+        message: "Refresh token không hợp lệ hoặc đã hết hạn",
+        error: error.message,
+      });
     }
   } catch (error) {
     console.error("Error refreshing token:", error.message);
