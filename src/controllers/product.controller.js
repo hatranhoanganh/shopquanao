@@ -137,6 +137,7 @@ const deleteUploadedFile = (filePath) => {
   }
 };
 
+
 // Thêm sản phẩm
 const addProduct = async (req, res) => {
   try {
@@ -150,13 +151,12 @@ const addProduct = async (req, res) => {
       description,
     } = req.body;
 
-    // 1. Kiểm tra dữ liệu đầu vào
+    // 1. Kiểm tra dữ liệu đầu vào (discount không bắt buộc)
     if (
       !id_category ||
       !id_gallery ||
       !title ||
       !price ||
-      !discount ||
       !size ||
       !description
     ) {
@@ -169,6 +169,17 @@ const addProduct = async (req, res) => {
 
     const image = req.file ? req.file.filename : null;
     console.log(image);
+
+    // 2. Kiểm tra discount (nếu có giá trị)
+    if (discount !== undefined && discount !== null) {
+      if (isNaN(discount) || discount >= 100) {
+        deleteUploadedFile(req.file?.path); // Xóa file nếu discount không hợp lệ
+        return res.status(400).json({
+          message: "Giảm giá phải là số và nhỏ hơn 100",
+          data: null,
+        });
+      }
+    }
 
     // 2. Kiểm tra danh mục tồn tại
     const category = await model.category.findByPk(id_category);
@@ -197,7 +208,7 @@ const addProduct = async (req, res) => {
       id_gallery,
       title,
       price,
-      discount,
+      discount: discount || 0, // Nếu không nhập discount, mặc định là 0
       size,
       description,
     });
@@ -206,12 +217,13 @@ const addProduct = async (req, res) => {
     const productData = {
       id_product: newProduct.id_product,
       id_category: newProduct.id_category,
-      name: category.name, // Lấy tên danh mục
+      name: category.name,
       gallery: {
         id_gallery: gallery.id_gallery,
-        thumbnail: typeof gallery.thumbnail === "string" 
-          ? JSON.parse(gallery.thumbnail) 
-          : gallery.thumbnail, // Chuyển chuỗi JSON thành mảng hoặc giữ nguyên nếu đã là mảng
+        thumbnail:
+          typeof gallery.thumbnail === "string"
+            ? JSON.parse(gallery.thumbnail)
+            : gallery.thumbnail,
       },
       title: newProduct.title,
       price: newProduct.price,
@@ -252,13 +264,12 @@ const updateProduct = async (req, res) => {
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
     }
 
-    // 2. Kiểm tra các trường cần thiết
+    // 2. Kiểm tra các trường cần thiết (discount không bắt buộc)
     if (
       !id_category ||
       !id_gallery ||
       !title ||
       !price ||
-      !discount ||
       !size ||
       !description
     ) {
@@ -268,45 +279,56 @@ const updateProduct = async (req, res) => {
       });
     }
 
-    // 3. Kiểm tra danh mục tồn tại
+    // 3. Kiểm tra discount (nếu có giá trị)
+    if (discount !== undefined && discount !== null) {
+      if (isNaN(discount) || discount >= 100) {
+        return res.status(400).json({
+          message: "Giảm giá phải là số và nhỏ hơn 100",
+          data: null,
+        });
+      }
+    }
+
+    // 4. Kiểm tra danh mục tồn tại
     const category = await model.category.findByPk(id_category);
     if (!category) {
       return res.status(404).json({ message: "Danh mục không tồn tại" });
     }
 
-    // 4. Kiểm tra gallery tồn tại
+    // 5. Kiểm tra gallery tồn tại
     const gallery = await model.gallery.findByPk(id_gallery);
     if (!gallery) {
       return res.status(404).json({ message: "Gallery không tồn tại" });
     }
 
-    // 5. Cập nhật sản phẩm
+    // 6. Cập nhật sản phẩm
     await model.product.update(
       {
         id_category,
         id_gallery,
         title,
         price,
-        discount,
+        discount: discount || 0, // Nếu không nhập discount, giữ nguyên hoặc mặc định là 0
         size,
         description,
       },
       { where: { id_product } }
     );
 
-    // 6. Lấy lại thông tin sản phẩm đã cập nhật
+    // 7. Lấy lại thông tin sản phẩm đã cập nhật
     product = await model.product.findByPk(id_product);
 
-    // 7. Trả về thông tin sản phẩm với dữ liệu gallery
+    // 8. Trả về thông tin sản phẩm với dữ liệu gallery
     const productData = {
       id_product: product.id_product,
       id_category: product.id_category,
-      name: category.name, // Lấy tên danh mục
+      name: category.name,
       gallery: {
         id_gallery: gallery.id_gallery,
-        thumbnail: typeof gallery.thumbnail === "string" 
-          ? JSON.parse(gallery.thumbnail) 
-          : gallery.thumbnail, // Chuyển chuỗi JSON thành mảng hoặc giữ nguyên nếu đã là mảng
+        thumbnail:
+          typeof gallery.thumbnail === "string"
+            ? JSON.parse(gallery.thumbnail)
+            : gallery.thumbnail,
       },
       title: product.title,
       price: product.price,
