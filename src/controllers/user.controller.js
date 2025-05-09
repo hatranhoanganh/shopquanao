@@ -132,13 +132,13 @@ const loginUser = async (req, res) => {
     const accessToken = jwt.sign(
       { id_user: user.id_user, email: user.email, role: user.role },
       ACCESS_TOKEN_SECRET,
-      { expiresIn: "1m" }
+      { expiresIn: "30s" }
     );
 
     const refreshToken = jwt.sign(
       { id_user: user.id_user, email: user.email, role: user.role },
       REFRESH_TOKEN_SECRET,
-      { expiresIn: "1m" }
+      { expiresIn: "30s" }
     );
 
     res.cookie("refreshToken", refreshToken, {
@@ -186,7 +186,7 @@ const refreshToken = async (req, res) => {
       const newAccessToken = jwt.sign(
         { id_user: decoded.id_user, email: decoded.email, role: decoded.role },
         ACCESS_TOKEN_SECRET,
-        { expiresIn: "15m" }
+        { expiresIn: "30s" }
       );
 
       return res.status(200).json({
