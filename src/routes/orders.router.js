@@ -11,6 +11,7 @@ import {
   getOrderByStatus,
   GetOrderByID,
   getCartItems,
+  getOrderByUser,
 } from "../controllers/orders.controller.js";
 import { getPaginatedData } from "../controllers/pagination.controller.js";
 import { authMiddleware, adminMiddleware, userOnlyMiddleware } from "../middleware/authMiddleware.js";
@@ -36,7 +37,7 @@ ordersRoutes.post("/HuyDonHang", authMiddleware, userOnlyMiddleware, cancelOrder
 ordersRoutes.get("/LayDanhSachDonHangCuaNguoiDung/:keyword", authMiddleware, getOrderByKeyWordUser);
 ordersRoutes.get("/LayDonHangTheoMaDonHang/:id_order", authMiddleware, GetOrderByID );
 ordersRoutes.get("/LayDanhSachSanPhamTrongGioHang/:id_user", authMiddleware, userOnlyMiddleware, getCartItems);
-
+ordersRoutes.get("/LayDanhSachDonHangTheoMaNguoiDung/:id_user", authMiddleware, getOrderByUser);
 ordersRoutes.delete("/XoaSanPhamTrongGioHang/:id_user/:id_product", authMiddleware, removeFromCart);
 
 
