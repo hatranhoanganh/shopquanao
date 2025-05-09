@@ -138,7 +138,7 @@ const loginUser = async (req, res) => {
     const refreshToken = jwt.sign(
       { id_user: user.id_user, email: user.email, role: user.role },
       REFRESH_TOKEN_SECRET,
-      { expiresIn: "30s" }
+      { expiresIn: "1m" }
     );
 
     res.cookie("refreshToken", refreshToken, {
