@@ -132,14 +132,14 @@ const loginUser = async (req, res) => {
     const accessToken = jwt.sign(
       { id_user: user.id_user, email: user.email, role: user.role },
       ACCESS_TOKEN_SECRET,
-      { expiresIn: "1h" } // Giảm xuống 1 giờ để dễ kiểm tra
+      { expiresIn: "7d" } // Giảm xuống 1 giờ để dễ kiểm tra
     );
     console.log("Access token created:", accessToken);
 
     const refreshToken = jwt.sign(
       { id_user: user.id_user, email: user.email, role: user.role },
       REFRESH_TOKEN_SECRET,
-      { expiresIn: "7d" } // 7 ngày
+      { expiresIn: "30d" } // 7 ngày
     );
     console.log("Refresh token created:", refreshToken);
 
@@ -196,7 +196,7 @@ const refreshToken = async (req, res) => {
       const newAccessToken = jwt.sign(
         { id_user: decoded.id_user, email: decoded.email, role: decoded.role },
         ACCESS_TOKEN_SECRET,
-        { expiresIn: "1h" } // 1 giờ
+        { expiresIn: "30d" } 
       );
       console.log("New access token generated:", newAccessToken);
 
