@@ -156,6 +156,151 @@ const addToCart = async (req, res) => {
   }
 };
 
+// Hàm cập nhật sản phẩm trong giỏ hàng
+const updateCartItem = async (req, res) => {
+  try {
+    const { id_user, id_product, quantity } = req.body;
+    const userIdFromToken = req.user.id_user; // Lấy id_user từ token
+    const userRole = req.user.role; // Lấy role từ token
+
+    // 1. Kiểm tra vai trò: chỉ user mới được cập nhật giỏ hàng
+    if (userRole !== "user") {
+      return res.status(403).json({
+        message: "Chỉ người dùng thông thường mới có quyền thực hiện hành động này",
+      });
+    }
+
+    // 2. Kiểm tra dữ liệu đầu vào
+    if (!id_user || !id_product) {
+      return res.status(400).json({
+        message: "Vui lòng cung cấp đầy đủ thông tin: id_user, id_product",
+      });
+    }
+
+    if (quantity !== undefined && (!Number.isInteger(quantity) || quantity <= 0)) {
+      return res.status(400).json({ message: "Số lượng phải là số nguyên lớn hơn 0" });
+    }
+
+    // 3. Kiểm tra quyền: id_user trong body phải khớp với id_user trong token
+    if (parseInt(id_user) !== userIdFromToken) {
+      return res.status(403).json({
+        message: "Bạn không có quyền cập nhật giỏ hàng của người dùng khác",
+      });
+    }
+
+    // 4. Kiểm tra người dùng có tồn tại không
+    const userExist = await model.user.findOne({
+      where: { id_user },
+    });
+    if (!userExist) {
+      return res.status(404).json({ message: "Người dùng không tồn tại" });
+    }
+
+    // 5. Kiểm tra sản phẩm có tồn tại không
+    const productExist = await model.product.findOne({
+      where: { id_product },
+      include: [
+        {
+          model: model.gallery,
+          as: "gallery",
+          attributes: ["thumbnail"],
+        },
+      ],
+    });
+    if (!productExist) {
+      return res.status(404).json({ message: "Sản phẩm không tồn tại trong giỏ hàng" });
+    }
+
+    // 6. Kiểm tra giá sản phẩm và áp dụng giảm giá
+    if (!productExist.price || productExist.price <= 0) {
+      return res.status(400).json({ message: "Giá sản phẩm không hợp lệ" });
+    }
+
+    const discount = productExist.discount || 0;
+    const finalPrice = productExist.price * (1 - discount / 100);
+    if (finalPrice <= 0) {
+      return res.status(400).json({ message: "Giá sản phẩm sau giảm giá không hợp lệ" });
+    }
+
+    // 7. Tìm đơn hàng (status: "cart")
+    const order = await model.orders.findOne({
+      where: {
+        id_user,
+        status: "cart",
+      },
+    });
+
+    if (!order) {
+      return res.status(404).json({ message: "Không tìm thấy giỏ hàng của người dùng" });
+    }
+
+    // 8. Tìm sản phẩm trong chi tiết đơn hàng
+    let orderProduct = await model.order_product.findOne({
+      where: {
+        id_order: order.id_order,
+        id_product,
+      },
+    });
+
+    if (!orderProduct) {
+      return res.status(404).json({ message: "Sản phẩm không có trong giỏ hàng" });
+    }
+
+    // 9. Cập nhật số lượng hoặc kích thước nếu được cung cấp
+    let updated = false;
+    if (quantity !== undefined) {
+      orderProduct.quantity = quantity;
+      orderProduct.total_money = quantity * finalPrice;
+      updated = true;
+    }
+
+   
+
+    if (!updated) {
+      return res.status(400).json({ message: "Không có thay đổi nào được cung cấp để cập nhật" });
+    }
+
+    await orderProduct.save();
+
+    // 10. Xử lý thumbnail
+    let thumbnail = productExist.gallery?.thumbnail || null;
+    if (thumbnail && typeof thumbnail === "string") {
+      try {
+        thumbnail = JSON.parse(thumbnail);
+      } catch (error) {
+        console.error("Lỗi parse thumbnail:", error.message);
+        thumbnail = [];
+      }
+    }
+
+    // 11. Trả về kết quả
+    return res.status(200).json({
+      message: "Cập nhật sản phẩm trong giỏ hàng thành công",
+      data: {
+        order_id: order.id_order,
+        product_id: orderProduct.id_product,
+        quantity: orderProduct.quantity,
+        size: orderProduct.size || productExist.size,
+        total_money: orderProduct.total_money,
+        product_details: {
+          title: productExist.title,
+          size: productExist.size,
+          price: productExist.price,
+          discount: productExist.discount,
+          thumbnail: thumbnail || [],
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Lỗi khi cập nhật sản phẩm trong giỏ hàng:", error);
+    return res.status(500).json({
+      message: "Lỗi server khi cập nhật sản phẩm trong giỏ hàng",
+      error: error.message,
+      stack: error.stack,
+    });
+  }
+};
+
 // Hàm đặt hàng
 const placeOrder = async (req, res) => {
   try {
@@ -1642,5 +1787,5 @@ const getOrderByUser = async (req, res) => {
 };
 
 // Export các hàm
-export { addToCart, placeOrder, getOrderByKeyWordUser,  cancelOrder, deleteOrder, confirmOrder, removeFromCart,
+export { addToCart,updateCartItem, placeOrder, getOrderByKeyWordUser,  cancelOrder, deleteOrder, confirmOrder, removeFromCart,
   getOrderByStatus,GetOrderByID, getCartItems, getOrderByUser, };

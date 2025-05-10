@@ -132,14 +132,14 @@ const loginUser = async (req, res) => {
     const accessToken = jwt.sign(
       { id_user: user.id_user, email: user.email, role: user.role },
       ACCESS_TOKEN_SECRET,
-      { expiresIn: "7d" } // Giảm xuống 1 giờ để dễ kiểm tra
+      { expiresIn: "7d" } 
     );
     console.log("Access token created:", accessToken);
 
     const refreshToken = jwt.sign(
       { id_user: user.id_user, email: user.email, role: user.role },
       REFRESH_TOKEN_SECRET,
-      { expiresIn: "30d" } // 7 ngày
+      { expiresIn: "30d" } 
     );
     console.log("Refresh token created:", refreshToken);
 
@@ -147,7 +147,7 @@ const loginUser = async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production" ? true : false, // Tắt secure trong dev
       sameSite: process.env.NODE_ENV === "production" ? "Strict" : "Lax", // Linh hoạt hơn trong dev
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 ngày
+      maxAge: 7 * 24 * 60 * 60 * 1000, 
       path: "/",
     });
     console.log("Refresh token cookie set");

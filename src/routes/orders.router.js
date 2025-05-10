@@ -2,8 +2,8 @@ import express from "express";
 import {
   placeOrder,
   addToCart,
+  updateCartItem,
   getOrderByKeyWordUser,
-  // getAllOrders,
   cancelOrder,
   deleteOrder,
   confirmOrder,
@@ -30,6 +30,7 @@ ordersRoutes.get("/LayDanhSachDonHangTheoTrangThai/:status", authMiddleware, adm
 
 // Routes cho tất cả người dùng đã đăng nhập (chỉ cần authMiddleware)
 ordersRoutes.post("/ThemSanPhamVaoGioHang", authMiddleware, userOnlyMiddleware, addToCart);
+ordersRoutes.put("/CapNhatSanPhamTrongGioHang", authMiddleware, userOnlyMiddleware, updateCartItem);
 ordersRoutes.post("/DatHang", authMiddleware, userOnlyMiddleware, placeOrder);
 ordersRoutes.post("/HuyDonHang", authMiddleware, userOnlyMiddleware, cancelOrder);
 
