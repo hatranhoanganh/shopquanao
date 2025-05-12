@@ -3,8 +3,6 @@ import initModels from "../models/init-models.js";
 import { Op } from "sequelize";
 import fs from "fs";
 import moment from "moment";
-import product from "../models/product.js";
-import { title } from "process";
 
 const model = initModels(sequelize);
 
@@ -30,9 +28,8 @@ const getProducts = async (req, res) => {
       return res.status(404).json({ message: "Không có sản phẩm nào cả" });
     }
 
-    // Parse thumbnail từ chuỗi JSON thành mảng
     const parsedProducts = listProducts.map((product) => {
-      const productData = product.toJSON(); // Chuyển instance Sequelize thành object thuần
+      const productData = product.toJSON();
       if (productData.gallery && productData.gallery.thumbnail) {
         try {
           productData.gallery.thumbnail = JSON.parse(
@@ -40,9 +37,12 @@ const getProducts = async (req, res) => {
           );
         } catch (error) {
           console.error("Lỗi parse thumbnail:", error.message);
-          productData.gallery.thumbnail = []; // Trả về mảng rỗng nếu parse thất bại
+          productData.gallery.thumbnail = [];
         }
       }
+      productData.description = productData.description
+        ? productData.description.split(". ").filter(Boolean)
+        : [];
       return productData;
     });
 
@@ -57,26 +57,24 @@ const getProducts = async (req, res) => {
   }
 };
 
-// Xóa khóa học
+// Xóa sản phẩm
 const deleteProduct = async (req, res) => {
   try {
     const { id_product } = req.params;
 
-    // Kiểm tra sản phẩm tồn tại
     const product = await model.product.findByPk(id_product);
     if (!product) {
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
     }
 
-    // Kiểm tra xem sản phẩm có trong đơn hàng với trạng thái "pending", "confirmed", hoặc "delivering"
     const restrictedStatuses = ["pending", "confirmed", "delivering"];
-    console.log("Checking product with id:", id_product); // Debug
+    console.log("Checking product with id:", id_product);
     const orderProducts = await model.order_product.findOne({
       where: { id_product },
       include: [
         {
           model: model.orders,
-          as: "order", // Sửa alias từ "id_order_order" thành "order"
+          as: "order",
           where: {
             status: {
               [Op.in]: restrictedStatuses,
@@ -88,24 +86,21 @@ const deleteProduct = async (req, res) => {
     });
 
     if (orderProducts) {
-      console.log("Product found in restricted order:", orderProducts.toJSON()); // Debug
+      console.log("Product found in restricted order:", orderProducts.toJSON());
       return res.status(400).json({
         message: "Sản phẩm đang được khách đặt nên không thể xóa",
       });
     }
 
-    console.log("No restrictions found, proceeding to delete product:", id_product); // Debug
-    // Xóa các bản ghi liên quan trong bảng order_product
+    console.log("No restrictions found, proceeding to delete product:", id_product);
     await model.order_product.destroy({
       where: { id_product },
     });
 
-    // Xóa sản phẩm
     await model.product.destroy({
       where: { id_product },
     });
 
-    // Xóa ảnh nếu có
     if (product.id_gallery) {
       try {
         deleteUploadedFile("public/image/" + product.id_gallery);
@@ -116,7 +111,7 @@ const deleteProduct = async (req, res) => {
 
     return res.status(200).json({ message: "Xóa sản phẩm thành công!" });
   } catch (error) {
-    console.error("Error deleting product - Details:", error); // Debug chi tiết
+    console.error("Error deleting product - Details:", error);
     return res.status(500).json({
       message: "Error deleting product",
       error: error.message,
@@ -124,19 +119,16 @@ const deleteProduct = async (req, res) => {
   }
 };
 
-// Hàm xóa file đã upload done
+// Hàm xóa file đã upload
 const deleteUploadedFile = (filePath) => {
   try {
     if (filePath) {
       fs.unlinkSync(filePath);
     }
   } catch (error) {
-    return res
-      .status(400)
-      .json({ message: "Error deleting course", error: error.message });
+    throw new Error("Lỗi khi xóa file: " + error.message);
   }
 };
-
 
 // Thêm sản phẩm
 const addProduct = async (req, res) => {
@@ -151,7 +143,6 @@ const addProduct = async (req, res) => {
       description,
     } = req.body;
 
-    // 1. Kiểm tra dữ liệu đầu vào (discount không bắt buộc)
     if (
       !id_category ||
       !id_gallery ||
@@ -170,10 +161,9 @@ const addProduct = async (req, res) => {
     const image = req.file ? req.file.filename : null;
     console.log(image);
 
-    // 2. Kiểm tra discount (nếu có giá trị)
     if (discount !== undefined && discount !== null) {
       if (isNaN(discount) || discount >= 100) {
-        deleteUploadedFile(req.file?.path); // Xóa file nếu discount không hợp lệ
+        deleteUploadedFile(req.file?.path);
         return res.status(400).json({
           message: "Giảm giá phải là số và nhỏ hơn 100",
           data: null,
@@ -181,39 +171,34 @@ const addProduct = async (req, res) => {
       }
     }
 
-    // 2. Kiểm tra danh mục tồn tại
     const category = await model.category.findByPk(id_category);
     if (!category) {
       return res.status(404).json({ message: "Danh mục không tồn tại" });
     }
 
-    // 3. Kiểm tra gallery tồn tại
     const gallery = await model.gallery.findByPk(id_gallery);
     if (!gallery) {
       return res.status(404).json({ message: "Gallery không tồn tại" });
     }
 
-    // 4. Validate price
     if (isNaN(price) || price < 1000) {
-      deleteUploadedFile(req.file?.path); // Xóa file nếu giá không hợp lệ
+      deleteUploadedFile(req.file?.path);
       return res.status(400).json({
         message: "Giá phải là một số dương và ít nhất là 1,000",
         data: null,
       });
     }
 
-    // 5. Tạo sản phẩm mới
     const newProduct = await model.product.create({
       id_category,
       id_gallery,
       title,
       price,
-      discount: discount || 0, // Nếu không nhập discount, mặc định là 0
+      discount: discount || 0,
       size,
       description,
     });
 
-    // 6. Trả về thông tin sản phẩm với dữ liệu gallery
     const productData = {
       id_product: newProduct.id_product,
       id_category: newProduct.id_category,
@@ -229,7 +214,9 @@ const addProduct = async (req, res) => {
       price: newProduct.price,
       discount: newProduct.discount,
       size: newProduct.size,
-      description: newProduct.description,
+      description: newProduct.description
+        ? newProduct.description.split(". ").filter(Boolean)
+        : [],
       created_at: newProduct.created_at,
     };
 
@@ -258,13 +245,11 @@ const updateProduct = async (req, res) => {
       description,
     } = req.body;
 
-    // 1. Kiểm tra xem sản phẩm có tồn tại không
     let product = await model.product.findByPk(id_product);
     if (!product) {
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
     }
 
-    // 2. Kiểm tra các trường cần thiết (discount không bắt buộc)
     if (
       !id_category ||
       !id_gallery ||
@@ -279,7 +264,6 @@ const updateProduct = async (req, res) => {
       });
     }
 
-    // 3. Kiểm tra discount (nếu có giá trị)
     if (discount !== undefined && discount !== null) {
       if (isNaN(discount) || discount >= 100) {
         return res.status(400).json({
@@ -289,36 +273,31 @@ const updateProduct = async (req, res) => {
       }
     }
 
-    // 4. Kiểm tra danh mục tồn tại
     const category = await model.category.findByPk(id_category);
     if (!category) {
       return res.status(404).json({ message: "Danh mục không tồn tại" });
     }
 
-    // 5. Kiểm tra gallery tồn tại
     const gallery = await model.gallery.findByPk(id_gallery);
     if (!gallery) {
       return res.status(404).json({ message: "Gallery không tồn tại" });
     }
 
-    // 6. Cập nhật sản phẩm
     await model.product.update(
       {
         id_category,
         id_gallery,
         title,
         price,
-        discount: discount || 0, // Nếu không nhập discount, giữ nguyên hoặc mặc định là 0
+        discount: discount || 0,
         size,
         description,
       },
       { where: { id_product } }
     );
 
-    // 7. Lấy lại thông tin sản phẩm đã cập nhật
     product = await model.product.findByPk(id_product);
 
-    // 8. Trả về thông tin sản phẩm với dữ liệu gallery
     const productData = {
       id_product: product.id_product,
       id_category: product.id_category,
@@ -334,7 +313,9 @@ const updateProduct = async (req, res) => {
       price: product.price,
       discount: product.discount,
       size: product.size,
-      description: product.description,
+      description: product.description
+        ? product.description.split(". ").filter(Boolean)
+        : [],
       updated_at: product.updated_at,
     };
 
@@ -348,7 +329,7 @@ const updateProduct = async (req, res) => {
   }
 };
 
-//Lấy danh sách sản phẩm theo danh mục done
+// Lấy danh sách sản phẩm theo danh mục
 const getProductByCategory = async (req, res) => {
   try {
     const { id_category } = req.params;
@@ -380,17 +361,21 @@ const getProductByCategory = async (req, res) => {
         .json({ message: "Không có sản phẩm nào trong danh mục này" });
     }
 
-    // Parse thumbnail từ chuỗi JSON thành mảng
-    const parsedProducts = listProduct.map(product => {
+    const parsedProducts = listProduct.map((product) => {
       const productData = product.toJSON();
       if (productData.gallery && productData.gallery.thumbnail) {
         try {
-          productData.gallery.thumbnail = JSON.parse(productData.gallery.thumbnail);
+          productData.gallery.thumbnail = JSON.parse(
+            productData.gallery.thumbnail
+          );
         } catch (error) {
-          console.error('Lỗi parse thumbnail:', error.message);
-          productData.gallery.thumbnail = []; // Trả về mảng rỗng nếu parse thất bại
+          console.error("Lỗi parse thumbnail:", error.message);
+          productData.gallery.thumbnail = [];
         }
       }
+      productData.description = productData.description
+        ? productData.description.split(". ").filter(Boolean)
+        : [];
       return productData;
     });
 
@@ -400,7 +385,7 @@ const getProductByCategory = async (req, res) => {
   }
 };
 
-//Lấy thông tin sản phẩm theo id done
+// Lấy thông tin sản phẩm theo id
 const getProductById = async (req, res) => {
   try {
     const { id_product } = req.params;
@@ -429,16 +414,20 @@ const getProductById = async (req, res) => {
       return res.status(404).json({ message: "Sản phẩm không tồn tại" });
     }
 
-    // Parse thumbnail từ chuỗi JSON thành mảng
-    const productData = product.toJSON(); // Chuyển instance Sequelize thành object thuần
+    const productData = product.toJSON();
     if (productData.gallery && productData.gallery.thumbnail) {
       try {
-        productData.gallery.thumbnail = JSON.parse(productData.gallery.thumbnail);
+        productData.gallery.thumbnail = JSON.parse(
+          productData.gallery.thumbnail
+        );
       } catch (error) {
-        console.error('Lỗi parse thumbnail:', error.message);
-        productData.gallery.thumbnail = []; // Trả về mảng rỗng nếu parse thất bại
+        console.error("Lỗi parse thumbnail:", error.message);
+        productData.gallery.thumbnail = [];
       }
     }
+    productData.description = productData.description
+      ? productData.description.split(". ").filter(Boolean)
+      : [];
 
     return res.status(200).json({
       message: "Lấy thông tin sản phẩm thành công",
@@ -453,7 +442,7 @@ const getProductById = async (req, res) => {
   }
 };
 
-//Lấy danh sách khóa học theo tên sản phẩm
+// Lấy danh sách sản phẩm theo tên sản phẩm
 const getProductByName = async (req, res) => {
   try {
     const { title } = req.params;
@@ -479,17 +468,21 @@ const getProductByName = async (req, res) => {
         .json({ message: "Không tìm thấy sản phẩm nào với tên này" });
     }
 
-    // Parse thumbnail từ chuỗi JSON thành mảng
-    const parsedProducts = listProduct.map(product => {
+    const parsedProducts = listProduct.map((product) => {
       const productData = product.toJSON();
       if (productData.gallery && productData.gallery.thumbnail) {
         try {
-          productData.gallery.thumbnail = JSON.parse(productData.gallery.thumbnail);
+          productData.gallery.thumbnail = JSON.parse(
+            productData.gallery.thumbnail
+          );
         } catch (error) {
-          console.error('Lỗi parse thumbnail:', error.message);
-          productData.gallery.thumbnail = []; // Trả về mảng rỗng nếu parse thất bại
+          console.error("Lỗi parse thumbnail:", error.message);
+          productData.gallery.thumbnail = [];
         }
       }
+      productData.description = productData.description
+        ? productData.description.split(". ").filter(Boolean)
+        : [];
       return productData;
     });
 
@@ -507,7 +500,9 @@ const getProductByKeyword = async (req, res) => {
     const trimmedKeyword = keyword.trim();
 
     if (!trimmedKeyword) {
-      return res.status(400).json({ message: "Từ khóa tìm kiếm không được để trống" });
+      return res
+        .status(400)
+        .json({ message: "Từ khóa tìm kiếm không được để trống" });
     }
 
     const whereConditions = {
@@ -520,7 +515,6 @@ const getProductByKeyword = async (req, res) => {
       ],
     };
 
-    // Thêm điều kiện lọc theo danh mục nếu có id_category
     if (id_category) {
       whereConditions.id_category = id_category;
     }
@@ -550,17 +544,21 @@ const getProductByKeyword = async (req, res) => {
         .json({ message: "Không tìm thấy sản phẩm nào với từ khóa này" });
     }
 
-    // Parse thumbnail từ chuỗi JSON thành mảng
     const parsedProducts = listProduct.map((product) => {
       const productData = product.toJSON();
       if (productData.gallery && productData.gallery.thumbnail) {
         try {
-          productData.gallery.thumbnail = JSON.parse(productData.gallery.thumbnail);
+          productData.gallery.thumbnail = JSON.parse(
+            productData.gallery.thumbnail
+          );
         } catch (error) {
           console.error("Lỗi parse thumbnail:", error.message);
           productData.gallery.thumbnail = [];
         }
       }
+      productData.description = productData.description
+        ? productData.description.split(". ").filter(Boolean)
+        : [];
       return productData;
     });
 
@@ -576,7 +574,9 @@ const getProductByKeyword = async (req, res) => {
     });
   } catch (err) {
     console.error("Error fetching products by keyword:", err.message);
-    return res.status(400).json({ message: "Lỗi khi tìm kiếm sản phẩm", error: err.message });
+    return res
+      .status(400)
+      .json({ message: "Lỗi khi tìm kiếm sản phẩm", error: err.message });
   }
 };
 
@@ -619,16 +619,21 @@ const getProductByCategoryName = async (req, res) => {
         .json({ message: "Không có sản phẩm nào trong danh mục này" });
     }
 
-    const parsedProducts = listProduct.map(product => {
+    const parsedProducts = listProduct.map((product) => {
       const productData = product.toJSON();
       if (productData.gallery && productData.gallery.thumbnail) {
         try {
-          productData.gallery.thumbnail = JSON.parse(productData.gallery.thumbnail);
+          productData.gallery.thumbnail = JSON.parse(
+            productData.gallery.thumbnail
+          );
         } catch (error) {
-          console.error('Lỗi parse thumbnail:', error.message);
+          console.error("Lỗi parse thumbnail:", error.message);
           productData.gallery.thumbnail = [];
         }
       }
+      productData.description = productData.description
+        ? productData.description.split(". ").filter(Boolean)
+        : [];
       return productData;
     });
 
