@@ -9,6 +9,7 @@ import {
   getProductByName,
   getProductByKeyword,
   getProductByCategoryName,
+  getAllProducts,
 } from "../controllers/product.controller.js";
 import { getPaginatedData } from "../controllers/pagination.controller.js";
 import { getAllCategory } from "../controllers/category.controller.js";
@@ -25,6 +26,7 @@ productRoutes.get("/LayDanhSachSanPham", (req, res) => {
   res.locals.type = "products";
   getPaginatedData(req, res);
 });
+productRoutes.get("/LayTatCaSanPham", getAllProducts);
 productRoutes.get("/LayThongTinSanPhamTheoId/:id_product", getProductById);
 productRoutes.get("/LayDanhSachSanPhamTheoDanhMuc/:id_category", getProductByCategory);
 productRoutes.get("/LayDanhSachSanPhamTheoTitle/:title", getProductByName);

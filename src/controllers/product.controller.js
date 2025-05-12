@@ -7,7 +7,7 @@ import moment from "moment";
 const model = initModels(sequelize);
 
 // Lấy tất cả sản phẩm
-const getProducts = async (req, res) => {
+const getAllProducts = async (req, res) => {
   try {
     const listProducts = await model.product.findAll({
       include: [
@@ -666,7 +666,7 @@ const getProductByCategoryName = async (req, res) => {
 };
 
 export {
-  getProducts,
+  getAllProducts,
   addProduct,
   deleteProduct,
   updateProduct,
