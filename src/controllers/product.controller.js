@@ -333,19 +333,21 @@ const updateProduct = async (req, res) => {
 const getProductByCategory = async (req, res) => {
   try {
     const { id_category } = req.params;
+    const { page = 1, limit = 10 } = req.query;
+    const offset = (page - 1) * limit;
 
     const category = await model.category.findByPk(id_category);
     if (!category) {
       return res.status(404).json({ message: "Danh mục không tồn tại" });
     }
 
-    const listProduct = await model.product.findAll({
+    const { count, rows: listProduct } = await model.product.findAndCountAll({
       where: { id_category },
       include: [
         {
           model: model.category,
           as: "category",
-          attributes: ["name"],
+          attributes: ["id_category", "name"],
         },
         {
           model: model.gallery,
@@ -353,6 +355,8 @@ const getProductByCategory = async (req, res) => {
           attributes: ["id_gallery", "name", "thumbnail"],
         },
       ],
+      limit: parseInt(limit),
+      offset: parseInt(offset),
     });
 
     if (!listProduct || listProduct.length === 0) {
@@ -379,7 +383,16 @@ const getProductByCategory = async (req, res) => {
       return productData;
     });
 
-    return res.status(200).json({ message: "success", data: parsedProducts });
+    return res.status(200).json({
+      message: "success",
+      data: parsedProducts,
+      pagination: {
+        totalItems: count,
+        currentPage: parseInt(page),
+        pageSize: parseInt(limit),
+        totalPages: Math.ceil(count / limit),
+      },
+    });
   } catch (err) {
     return res.status(400).json({ message: "error", error: err.message });
   }
