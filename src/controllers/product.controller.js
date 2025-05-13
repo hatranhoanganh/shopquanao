@@ -359,12 +359,6 @@ const getProductByCategory = async (req, res) => {
       offset: parseInt(offset),
     });
 
-    if (!listProduct || listProduct.length === 0) {
-      return res
-        .status(404)
-        .json({ message: "Không có sản phẩm nào trong danh mục này" });
-    }
-
     const parsedProducts = listProduct.map((product) => {
       const productData = product.toJSON();
       if (productData.gallery && productData.gallery.thumbnail) {
