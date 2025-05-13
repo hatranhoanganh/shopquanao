@@ -13,7 +13,6 @@ const getPaginatedData = async (req, res) => {
     console.log("req.query in getPaginatedData:", req.query);
     console.log("res.locals in getPaginatedData:", res.locals);
 
-    // Kiểm tra và xử lý tham số page và limit
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 10;
 
@@ -56,7 +55,6 @@ const getPaginatedData = async (req, res) => {
       });
       totalItems = result.count;
     } else if (type === "products") {
-      // Lấy id_category từ query nếu có
       const { id_category } = req.query;
       const where = id_category ? { id_category: parseInt(id_category) } : {};
 
@@ -116,7 +114,7 @@ const getPaginatedData = async (req, res) => {
     } else if (type === "orders") {
       const result = await model.orders.findAndCountAll({
         where: {
-          status: { [Op.ne]: "cart" }, // Loại bỏ đơn hàng có status: "cart"
+          status: { [Op.ne]: "cart" }, // Chỉ lấy các đơn hàng không phải "cart"
         },
         limit,
         offset,
@@ -146,6 +144,13 @@ const getPaginatedData = async (req, res) => {
           },
         ],
       });
+
+      // Log để kiểm tra dữ liệu
+      console.log("Orders count (totalItems):", result.count);
+      console.log("Orders data statuses:", result.rows.map(row => ({
+        id_order: row.id_order,
+        status: row.status,
+      })));
 
       data = result.rows.map((order) => {
         const orderData = order.toJSON();
@@ -197,6 +202,9 @@ const getPaginatedData = async (req, res) => {
       hasNextPage: page < totalPages,
       hasPrevPage: page > 1,
     };
+
+    // Log toàn bộ response
+    console.log("Response sent:", { data, pagination });
 
     return res.status(200).json({
       message: `Lấy danh sách ${type === "products" ? "sản phẩm" : type === "users" ? "người dùng" : type === "orders" ? "đơn hàng" : "gallery"} thành công`,
