@@ -1,6 +1,7 @@
 import sequelize from "../models/connect.js";
 import initModels from "../models/init-models.js";
 import dotenv from "dotenv";
+import { Op } from "sequelize"; // Import Op để sử dụng toán tử Sequelize
 
 dotenv.config();
 
@@ -114,6 +115,9 @@ const getPaginatedData = async (req, res) => {
       totalItems = result.count;
     } else if (type === "orders") {
       const result = await model.orders.findAndCountAll({
+        where: {
+          status: { [Op.ne]: "cart" }, // Loại bỏ đơn hàng có status: "cart"
+        },
         limit,
         offset,
         include: [
